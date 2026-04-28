@@ -13,7 +13,6 @@ It stores Markdown files locally and does not require accounts, sync, telemetry,
 - Markdown formatting for headings, emphasis, lists, quotes, code blocks, tables, task lists, and horizontal rules
 - Basic table editing
 - Word and character counts
-- Linux desktop integration
 
 ## Requirements
 
