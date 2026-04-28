@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'none'; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    >
+    <title>Inkwell</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./markdown.js" defer></script>
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="app-name">Inkwell</div>
+          <nav class="menubar" aria-label="Application menus">
+            <div class="menu" data-menu-root>
+              <button class="menu-title" type="button" aria-haspopup="menu" aria-expanded="false">File</button>
+              <div class="menu-panel" role="menu" hidden>
+                <button class="menu-item" type="button" role="menuitem" data-command="new">New</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="newWindow">New Window</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="open">Open</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="save">Save</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="saveAs">Save As</button>
+              </div>
+            </div>
+
+            <div class="menu" data-menu-root>
+              <button class="menu-title" type="button" aria-haspopup="menu" aria-expanded="false">Edit</button>
+              <div class="menu-panel" role="menu" hidden>
+                <button class="menu-item" type="button" role="menuitem" data-command="undo">Undo</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="redo">Redo</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="selectAll">Select All</button>
+              </div>
+            </div>
+
+            <div class="menu" data-menu-root>
+              <button class="menu-title" type="button" aria-haspopup="menu" aria-expanded="false">View</button>
+              <div class="menu-panel" role="menu" hidden>
+                <button class="menu-item" type="button" role="menuitem" data-command="zoomIn">Zoom In</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="zoomOut">Zoom Out</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="resetZoom">Reset Zoom</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="fitWidth">Fit Width</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="toggleRuler">Hide Ruler</button>
+              </div>
+            </div>
+
+            <div class="menu" data-menu-root>
+              <button class="menu-title" type="button" aria-haspopup="menu" aria-expanded="false">Format</button>
+              <div class="menu-panel" role="menu" hidden>
+                <button class="menu-item" type="button" role="menuitem" data-command="bold">Bold</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="italic">Italic</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="strikethrough">Strikethrough</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="inlineCode">Inline Code</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="paragraph">Normal Text</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="heading1">Heading 1</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="heading2">Heading 2</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="heading3">Heading 3</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="blockquote">Block Quote</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="bulletList">Bulleted List</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="numberedList">Numbered List</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="taskList">Task List</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="codeBlock">Code Block</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="table">Table</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="horizontalRule">Horizontal Rule</button>
+              </div>
+            </div>
+
+            <div class="menu" data-menu-root>
+              <button class="menu-title" type="button" aria-haspopup="menu" aria-expanded="false">Settings</button>
+              <div class="menu-panel" role="menu" hidden>
+                <button class="menu-item" type="button" role="menuitem" data-command="themeDark">Dark Theme</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="themeLight">Light Theme</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="letterPage">Letter Page</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="a4Page">A4 Page</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="resetMargins">Reset Margins</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="keyboardShortcuts">Keyboard Shortcuts</button>
+              </div>
+            </div>
+          </nav>
+        </div>
+
+        <div class="file-state">
+          <span class="file-name" id="fileName">Untitled.md</span>
+          <span class="dirty-state" id="dirtyState">Saved</span>
+          <span class="zoom-state" id="zoomState">100%</span>
+        </div>
+      </header>
+
+      <section class="ruler" id="ruler" aria-label="Page ruler">
+        <div class="ruler-track" id="rulerTrack">
+          <div class="ruler-margin left" id="leftMarginShade"></div>
+          <div class="ruler-margin right" id="rightMarginShade"></div>
+          <div class="ruler-ticks" id="rulerTicks"></div>
+          <button class="ruler-handle left" id="leftMarginHandle" type="button" aria-label="Left margin"></button>
+          <button class="ruler-handle right" id="rightMarginHandle" type="button" aria-label="Right margin"></button>
+        </div>
+      </section>
+
+      <main class="workspace">
+        <div class="document-scroll" id="documentScroll">
+          <section class="page" id="page">
+            <article
+              id="editor"
+              class="editor"
+              aria-label="Markdown editor"
+              contenteditable="true"
+              spellcheck="true"
+            ></article>
+          </section>
+        </div>
+      </main>
+
+      <footer class="statusbar">
+        <span id="statusText">Ready</span>
+        <span id="documentStats">0 words</span>
+      </footer>
+    </div>
+
+    <input id="fileInput" class="hidden-file-input" type="file" accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain">
+
+    <div class="selection-toolbar" id="selectionToolbar" role="toolbar" aria-label="Markdown formatting" hidden>
+      <button class="tool-button strong" type="button" data-toolbar-action="bold" aria-label="Bold" title="Bold">B</button>
+      <button class="tool-button emphasis" type="button" data-toolbar-action="italic" aria-label="Italic" title="Italic">I</button>
+      <button class="tool-button strike" type="button" data-toolbar-action="strikethrough" aria-label="Strikethrough" title="Strikethrough">S</button>
+      <button class="tool-button code" type="button" data-toolbar-action="inlineCode" aria-label="Inline code" title="Inline code">&lt;/&gt;</button>
+      <span class="tool-separator" aria-hidden="true"></span>
+      <button class="tool-button" type="button" data-toolbar-action="paragraph" aria-label="Paragraph text" title="Paragraph text">P</button>
+      <button class="tool-button" type="button" data-toolbar-action="heading1" aria-label="Heading 1" title="Heading 1">H1</button>
+      <button class="tool-button" type="button" data-toolbar-action="heading2" aria-label="Heading 2" title="Heading 2">H2</button>
+      <button class="tool-button" type="button" data-toolbar-action="heading3" aria-label="Heading 3" title="Heading 3">H3</button>
+      <button class="tool-button" type="button" data-toolbar-action="blockquote" aria-label="Block quote" title="Block quote">&gt;</button>
+      <span class="tool-separator" aria-hidden="true"></span>
+      <button class="tool-button" type="button" data-toolbar-action="bulletList" aria-label="Bulleted list" title="Bulleted list">-</button>
+      <button class="tool-button" type="button" data-toolbar-action="numberedList" aria-label="Numbered list" title="Numbered list">1.</button>
+      <button class="tool-button" type="button" data-toolbar-action="taskList" aria-label="Task list" title="Task list">[ ]</button>
+      <button class="tool-button code" type="button" data-toolbar-action="codeBlock" aria-label="Code block" title="Code block">{ }</button>
+      <button class="tool-button" type="button" data-toolbar-action="table" aria-label="Table" title="Table">T</button>
+      <button class="tool-button" type="button" data-toolbar-action="horizontalRule" aria-label="Horizontal rule" title="Horizontal rule">---</button>
+    </div>
+
+    <div class="table-context-menu" id="tableContextMenu" role="menu" aria-label="Table actions" hidden>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="insertRowAbove">Insert Row Above</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="insertRowBelow">Insert Row Below</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="deleteRows">Delete Row</button>
+      <span class="table-menu-separator" aria-hidden="true"></span>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="insertColumnLeft">Insert Column Left</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="insertColumnRight">Insert Column Right</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="deleteColumns">Delete Column</button>
+      <span class="table-menu-separator" aria-hidden="true"></span>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="alignColumnLeft">Align Column Left</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="alignColumnCenter">Align Column Center</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="alignColumnRight">Align Column Right</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="alignColumnDefault">Clear Column Alignment</button>
+      <span class="table-menu-separator" aria-hidden="true"></span>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="copyCells">Copy Selected Cells</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="cutCells">Cut Selected Cells</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="pasteCells">Paste Into Selected Cells</button>
+      <span class="table-menu-separator" aria-hidden="true"></span>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="clearCells">Clear Selected Cells</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="clearRows">Clear Row</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="clearColumns">Clear Column</button>
+      <button class="table-menu-item" type="button" role="menuitem" data-table-action="normalizeTable">Normalize Table</button>
+      <button class="table-menu-item danger" type="button" role="menuitem" data-table-action="deleteTable">Delete Table</button>
+    </div>
+
+    <div class="modal-backdrop" id="confirmModal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+        <h2 id="confirmTitle">Unsaved changes</h2>
+        <p id="confirmMessage">Discard unsaved changes?</p>
+        <div class="modal-actions">
+          <button class="modal-button" id="confirmCancelButton" type="button">Cancel</button>
+          <button class="modal-button danger" id="confirmDiscardButton" type="button">Discard</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="shortcutModal" hidden>
+      <section class="modal shortcut-modal" role="dialog" aria-modal="true" aria-labelledby="shortcutTitle" aria-describedby="shortcutDescription">
+        <h2 id="shortcutTitle">Keyboard Shortcuts</h2>
+        <p id="shortcutDescription">Change app shortcuts. Use values like Ctrl+S, Ctrl+Shift+S, or None.</p>
+        <div class="shortcut-list" id="shortcutList"></div>
+        <p class="shortcut-error" id="shortcutError" role="alert" hidden></p>
+        <div class="modal-actions">
+          <button class="modal-button" id="shortcutDefaultsButton" type="button">Restore Defaults</button>
+          <button class="modal-button" id="shortcutCancelButton" type="button">Cancel</button>
+          <button class="modal-button danger" id="shortcutSaveButton" type="button">Save</button>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

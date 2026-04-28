@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.VendorBuyMVP.Inkwell</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Inkwell</name>
+  <summary>Local-first Markdown editor</summary>
+  <developer id="io.github.vendorbuymvp">
+    <name>Inkwell contributors</name>
+  </developer>
+  <description>
+    <p>
+      Inkwell is a simple Markdown editor for local writing. It keeps files on
+      your machine and does not include analytics, crash uploaders, updater
+      pings, accounts, sync services, remote fonts, or remote app assets.
+    </p>
+    <p>
+      The editor provides a focused writing surface with Markdown-aware styling,
+      dark and light themes, formatting controls, table tools, zoom controls,
+      and adjustable page margins.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.VendorBuyMVP.Inkwell.desktop</launchable>
+  <provides>
+    <binary>inkwell</binary>
+  </provides>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <content_rating type="oars-1.1" />
+  <url type="homepage">https://github.com/VendorBuyMVP/Inkwell</url>
+  <url type="bugtracker">https://github.com/VendorBuyMVP/Inkwell/issues</url>
+  <url type="vcs-browser">https://github.com/VendorBuyMVP/Inkwell</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Focused local Markdown editing</caption>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.4.0/app/assets/brand/social-share.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.4.0" date="2026-04-28">
+      <description>
+        <p>Adds editable keyboard shortcuts, visible shortcut labels in menus, improved table selection and table operations, multi-window support, and app-id-aligned Linux desktop integration.</p>
+      </description>
+    </release>
+  </releases>
+</component>

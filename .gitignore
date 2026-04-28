@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.DS_Store
+.codex
+node_modules/
+dist/
+build/
+tests/
+core/tests/
+.env
+*.log
+docs/
+AGENTS.md
+RELEASE_NOTES.md
+*.local.md
+*.md
+!README.md

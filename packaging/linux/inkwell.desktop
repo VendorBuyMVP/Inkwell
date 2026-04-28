@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Inkwell
+Comment=Local-first Markdown editor
+Exec=inkwell %F
+Icon=inkwell
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/markdown;text/x-markdown;application/x-markdown;
+StartupNotify=true
+StartupWMClass=io.github.VendorBuyMVP.Inkwell

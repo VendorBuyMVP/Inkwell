@@ -1,0 +1,26 @@
+name: Linux WebKit Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux WebKit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux app dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 desktop-file-utils appstream libxml2-utils
+      - name: Verify GTK and WebKit bindings
+        run: python3 -c "import gi; gi.require_version('Gtk', '3.0'); gi.require_version('WebKit2', '4.1')"
+      - name: Run checks
+        run: npm run check
+      - name: Validate desktop entries
+        run: desktop-file-validate packaging/linux/inkwell.desktop packaging/linux/io.github.VendorBuyMVP.Inkwell.desktop
