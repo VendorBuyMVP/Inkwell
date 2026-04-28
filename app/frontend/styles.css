@@ -237,6 +237,7 @@ body.ruler-hidden .app-shell {
   overflow: auto hidden;
   border-bottom: 1px solid var(--border);
   background: var(--chrome-bg);
+  padding: 0 24px;
 }
 
 .ruler[hidden] {

@@ -7,8 +7,11 @@
   const MIN_ZOOM = 50;
   const MAX_ZOOM = 200;
   const ZOOM_STEP = 10;
-  const MIN_MARGIN_IN = 0.25;
+  const MIN_MARGIN_IN = 0;
   const MIN_CONTENT_IN = 2;
+  const MIN_PAGE_WIDTH_IN = 4;
+  const MAX_PAGE_WIDTH_IN = 17;
+  const PAGE_EXPANSION_MARGIN_IN = 0.5;
   const MAX_PREFERENCES_SHORTCUTS = 80;
 
   const COMMANDS = [
@@ -150,6 +153,7 @@
     internalRender: false,
     activeMenu: null,
     marginDrag: null,
+    scrollSyncing: false,
     confirmResolve: null,
     savedRange: null,
     toolbarFrame: null,
@@ -311,6 +315,17 @@
   });
 
   window.addEventListener("pointerup", () => {
+    if (state.marginDrag) {
+      setStatus(statusText.textContent);
+    }
+    state.marginDrag = null;
+    finishTableDragSelection();
+  });
+
+  window.addEventListener("pointercancel", () => {
+    if (state.marginDrag) {
+      setStatus(statusText.textContent);
+    }
     state.marginDrag = null;
     finishTableDragSelection();
   });
@@ -322,9 +337,12 @@
   });
 
   documentScroll.addEventListener("scroll", () => {
+    syncRulerScrollFromDocument();
     scheduleSelectionToolbarUpdate();
     hideTableContextMenu();
   });
+
+  ruler.addEventListener("scroll", syncDocumentScrollFromRuler);
 
   if (!bridge.native) {
     window.addEventListener("beforeunload", (event) => {
@@ -852,26 +870,79 @@
 
   function beginMarginDrag(event, side) {
     event.preventDefault();
-    state.marginDrag = side;
+    const rect = rulerTrack.getBoundingClientRect();
+    state.marginDrag = {
+      side,
+      rectLeft: rect.left,
+      rectRight: rect.right,
+      pageWidthIn: documentSettings.pageWidthIn,
+      marginLeftIn: documentSettings.marginLeftIn,
+      marginRightIn: documentSettings.marginRightIn,
+      zoom: documentSettings.zoom / 100,
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function updateMarginDrag(event) {
-    const rect = rulerTrack.getBoundingClientRect();
-    const zoom = documentSettings.zoom / 100;
-    const pageWidthIn = documentSettings.pageWidthIn;
-    const maxLeft = pageWidthIn - documentSettings.marginRightIn - MIN_CONTENT_IN;
-    const maxRight = pageWidthIn - documentSettings.marginLeftIn - MIN_CONTENT_IN;
-
-    if (state.marginDrag === "left") {
-      const offset = clamp(event.clientX - rect.left, 0, rect.width);
-      documentSettings.marginLeftIn = clamp(offset / (PX_PER_INCH * zoom), MIN_MARGIN_IN, maxLeft);
-    } else if (state.marginDrag === "right") {
-      const offset = clamp(rect.right - event.clientX, 0, rect.width);
-      documentSettings.marginRightIn = clamp(offset / (PX_PER_INCH * zoom), MIN_MARGIN_IN, maxRight);
+    const drag = state.marginDrag;
+    if (!drag) {
+      return;
     }
 
+    const pxPerIn = PX_PER_INCH * drag.zoom;
+
+    if (drag.side === "left") {
+      const pointerIn = (event.clientX - drag.rectLeft) / pxPerIn;
+      if (pointerIn < 0) {
+        expandPageFromDrag(drag, -pointerIn);
+        documentSettings.marginLeftIn = getExpansionMarginBuffer();
+        documentSettings.marginRightIn = clamp(
+          drag.marginRightIn,
+          MIN_MARGIN_IN,
+          documentSettings.pageWidthIn - MIN_CONTENT_IN
+        );
+        setLiveStatus("Page width " + formatInches(documentSettings.pageWidthIn));
+      } else {
+        documentSettings.pageWidthIn = drag.pageWidthIn;
+        documentSettings.marginRightIn = drag.marginRightIn;
+        const maxLeft = documentSettings.pageWidthIn - documentSettings.marginRightIn - MIN_CONTENT_IN;
+        documentSettings.marginLeftIn = clamp(pointerIn, MIN_MARGIN_IN, maxLeft);
+        setLiveStatus("Left margin " + formatInches(documentSettings.marginLeftIn));
+      }
+    } else if (drag.side === "right") {
+      const pointerIn = (drag.rectRight - event.clientX) / pxPerIn;
+      if (pointerIn < 0) {
+        expandPageFromDrag(drag, -pointerIn);
+        documentSettings.marginRightIn = getExpansionMarginBuffer();
+        documentSettings.marginLeftIn = clamp(
+          drag.marginLeftIn,
+          MIN_MARGIN_IN,
+          documentSettings.pageWidthIn - MIN_CONTENT_IN
+        );
+        setLiveStatus("Page width " + formatInches(documentSettings.pageWidthIn));
+      } else {
+        documentSettings.pageWidthIn = drag.pageWidthIn;
+        documentSettings.marginLeftIn = drag.marginLeftIn;
+        const maxRight = documentSettings.pageWidthIn - documentSettings.marginLeftIn - MIN_CONTENT_IN;
+        documentSettings.marginRightIn = clamp(pointerIn, MIN_MARGIN_IN, maxRight);
+        setLiveStatus("Right margin " + formatInches(documentSettings.marginRightIn));
+      }
+    }
+
+    clampMargins();
     updateLayout();
+  }
+
+  function expandPageFromDrag(drag, overflowIn) {
+    documentSettings.pageWidthIn = clamp(
+      drag.pageWidthIn + overflowIn * 2,
+      MIN_PAGE_WIDTH_IN,
+      MAX_PAGE_WIDTH_IN
+    );
+  }
+
+  function getExpansionMarginBuffer() {
+    return Math.min(PAGE_EXPANSION_MARGIN_IN, Math.max(MIN_MARGIN_IN, documentSettings.pageWidthIn - MIN_CONTENT_IN));
   }
 
   async function newDocument() {
@@ -2361,7 +2432,7 @@
   }
 
   function setPageSize(widthIn, heightIn) {
-    documentSettings.pageWidthIn = widthIn;
+    documentSettings.pageWidthIn = clamp(widthIn, MIN_PAGE_WIDTH_IN, MAX_PAGE_WIDTH_IN);
     documentSettings.pageHeightIn = heightIn;
     clampMargins();
     updateLayout();
@@ -2411,6 +2482,7 @@
     zoomState.textContent = documentSettings.zoom + "%";
     updateRulerLabels();
     updateRulerGeometry(marginLeftPx, marginRightPx);
+    syncRulerScrollFromDocument();
   }
 
   function updateRulerLabels() {
@@ -2446,13 +2518,31 @@
   }
 
   function clampMargins() {
-    const max = Math.max(MIN_MARGIN_IN, documentSettings.pageWidthIn - MIN_CONTENT_IN - MIN_MARGIN_IN);
+    documentSettings.pageWidthIn = clamp(documentSettings.pageWidthIn, MIN_PAGE_WIDTH_IN, MAX_PAGE_WIDTH_IN);
+    const max = Math.max(MIN_MARGIN_IN, documentSettings.pageWidthIn - MIN_CONTENT_IN);
     documentSettings.marginLeftIn = clamp(documentSettings.marginLeftIn, MIN_MARGIN_IN, max);
     documentSettings.marginRightIn = clamp(
       documentSettings.marginRightIn,
       MIN_MARGIN_IN,
       documentSettings.pageWidthIn - documentSettings.marginLeftIn - MIN_CONTENT_IN
     );
+  }
+
+  function syncRulerScrollFromDocument() {
+    syncHorizontalScroll(documentScroll, ruler);
+  }
+
+  function syncDocumentScrollFromRuler() {
+    syncHorizontalScroll(ruler, documentScroll);
+  }
+
+  function syncHorizontalScroll(source, target) {
+    if (state.scrollSyncing || Math.abs(target.scrollLeft - source.scrollLeft) < 1) {
+      return;
+    }
+    state.scrollSyncing = true;
+    target.scrollLeft = source.scrollLeft;
+    state.scrollSyncing = false;
   }
 
   function updateChrome() {
@@ -2477,6 +2567,14 @@
     state.statusTimer = window.setTimeout(() => {
       statusText.textContent = "Ready";
     }, 3600);
+  }
+
+  function setLiveStatus(message) {
+    if (state.statusTimer) {
+      window.clearTimeout(state.statusTimer);
+      state.statusTimer = null;
+    }
+    statusText.textContent = message;
   }
 
   function confirmDiscardChanges() {
@@ -2542,6 +2640,10 @@
 
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
+  }
+
+  function formatInches(value) {
+    return value.toFixed(value < 10 ? 2 : 1) + " in";
   }
 
   function createSpan(className, text) {

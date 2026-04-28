@@ -679,7 +679,7 @@ static InkwellStatus replace_all_from_lines(InkwellDocument *doc, char **lines, 
 }
 
 const char *inkwell_core_version(void) {
-  return "0.4.2";
+  return "0.5.0";
 }
 
 InkwellStatus inkwell_markdown_analyze(const char *text, size_t len, InkwellMarkdownStats *out) {

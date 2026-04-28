@@ -35,13 +35,13 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.4.2/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.5.0/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
-    <release version="0.4.2" date="2026-04-28">
+    <release version="0.5.0" date="2026-04-28">
       <description>
-        <p>Fixes a Markdown parser freeze caused by empty heading markers such as ## and prevents empty headings from being saved in a form that can hang on reopen.</p>
+        <p>Adds expandable page-width editing from the ruler so dragging a margin handle past the page edge widens the writing surface symmetrically while preserving a half-inch text buffer.</p>
       </description>
     </release>
   </releases>
