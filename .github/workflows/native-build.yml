@@ -15,7 +15,7 @@ jobs:
     name: Linux WebKit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Linux app dependencies
         run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 desktop-file-utils appstream libxml2-utils
       - name: Verify GTK and WebKit bindings
