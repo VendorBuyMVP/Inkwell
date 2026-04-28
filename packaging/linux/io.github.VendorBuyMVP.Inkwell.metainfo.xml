@@ -35,10 +35,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.5.1/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.5.2/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.5.2" date="2026-04-28">
+      <description>
+        <p>Fixes new-document status so unsaved windows are clearly marked, and corrects rendered character counts so visual line breaks and structural table separators are not counted as characters.</p>
+      </description>
+    </release>
     <release version="0.5.1" date="2026-04-28">
       <description>
         <p>Improves editor responsiveness while typing, reduces delayed Enter key-repeat behavior, and fixes rendered word counts so adjacent headings, paragraphs, lists, and table cells are counted correctly.</p>

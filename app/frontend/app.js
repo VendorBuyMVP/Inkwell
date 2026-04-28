@@ -174,6 +174,7 @@
   const state = {
     name: "Untitled.md",
     dirty: false,
+    savedToDisk: false,
     statusTimer: null,
     statsTimer: null,
     statsPending: false,
@@ -198,7 +199,7 @@
     } else if (event.type === "closeRequest") {
       handleCloseRequest();
     } else if (event.type === "documentLoaded" && event.data) {
-      loadDocument(event.data.content || "", event.data.name || "Untitled.md", false);
+      loadDocument(event.data.content || "", event.data.name || "Untitled.md", false, true);
       setStatus("Opened " + (event.data.name || "document"));
     }
   };
@@ -394,7 +395,7 @@
     });
   }
 
-  loadDocument(DEFAULT_DOCUMENT, "Untitled.md", false);
+  loadDocument(DEFAULT_DOCUMENT, "Untitled.md", false, false);
   updateLayout();
   editor.focus();
 
@@ -995,7 +996,7 @@
       if (bridge.native) {
         await bridge.send("newFile");
       }
-      loadDocument("", "Untitled.md", false);
+      loadDocument("", "Untitled.md", false, false);
       setStatus("New document");
     } catch (error) {
       handleBridgeError(error, "New document failed.");
@@ -1023,7 +1024,7 @@
     try {
       if (bridge.native) {
         const result = await bridge.send("openFile");
-        loadDocument(result.content, result.name, false);
+        loadDocument(result.content, result.name, false, true);
         setStatus("Opened " + result.name);
       } else {
         fileInput.click();
@@ -1041,7 +1042,7 @@
     }
 
     const content = await file.text();
-    loadDocument(content, file.name, false);
+    loadDocument(content, file.name, false, true);
     setStatus("Opened " + file.name);
   });
 
@@ -1057,11 +1058,13 @@
         });
         state.name = result.name;
         state.dirty = false;
+        state.savedToDisk = true;
         updateChrome();
         setStatus("Saved " + result.name);
       } else {
         downloadMarkdown(content);
         state.dirty = false;
+        state.savedToDisk = true;
         updateChrome();
         setStatus("Downloaded " + state.name);
       }
@@ -1070,10 +1073,11 @@
     }
   }
 
-  function loadDocument(content, name, markDirty) {
+  function loadDocument(content, name, markDirty, savedToDisk) {
     renderMarkdown(content || "");
     state.name = name || "Untitled.md";
     state.dirty = Boolean(markDirty);
+    state.savedToDisk = Boolean(savedToDisk);
     updateChrome();
     updateStatsNow();
   }
@@ -2666,10 +2670,11 @@
   }
 
   function updateChrome() {
+    const unsaved = state.dirty || !state.savedToDisk;
     document.title = (state.dirty ? "*" : "") + state.name + " - Inkwell";
     fileName.textContent = state.name;
-    dirtyState.textContent = state.dirty ? "Unsaved" : "Saved";
-    dirtyState.classList.toggle("is-dirty", state.dirty);
+    dirtyState.textContent = unsaved ? "Unsaved" : "Saved";
+    dirtyState.classList.toggle("is-dirty", unsaved);
   }
 
   function markDirty() {
@@ -2713,9 +2718,10 @@
   }
 
   function updateStats() {
-    const text = getRenderedStatsText();
-    const words = countRenderedWords(text);
-    const chars = countRenderedCharacters(text);
+    const wordText = getRenderedStatsText();
+    const characterText = getRenderedCharacterStatsText();
+    const words = countRenderedWords(wordText);
+    const chars = countRenderedCharacters(characterText);
     documentStats.textContent = words + " words / " + chars + " chars";
   }
 
@@ -2751,13 +2757,38 @@
     return childText;
   }
 
+  function getRenderedCharacterStatsText() {
+    return getRenderedCharacterTextFromNode(editor);
+  }
+
+  function getRenderedCharacterTextFromNode(node) {
+    if (!node) {
+      return "";
+    }
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent || "";
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return "";
+    }
+
+    const tag = node.tagName.toLowerCase();
+    if (tag === "br" || tag === "script" || tag === "style") {
+      return "";
+    }
+
+    return Array.from(node.childNodes).map((child) => getRenderedCharacterTextFromNode(child)).join("");
+  }
+
   function countRenderedWords(text) {
     const trimmed = String(text || "").trim();
     return trimmed ? trimmed.split(/\s+/).length : 0;
   }
 
   function countRenderedCharacters(text) {
-    return String(text || "").replace(/\s+$/, "").length;
+    return String(text || "").replace(/[\r\n]+/g, "").replace(/\s+$/, "").length;
   }
 
   function setStatus(message) {
