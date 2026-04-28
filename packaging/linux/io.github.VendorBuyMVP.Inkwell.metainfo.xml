@@ -35,13 +35,13 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.4.0/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.4.1/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
-    <release version="0.4.0" date="2026-04-28">
+    <release version="0.4.1" date="2026-04-28">
       <description>
-        <p>Adds editable keyboard shortcuts, visible shortcut labels in menus, improved table selection and table operations, multi-window support, and app-id-aligned Linux desktop integration.</p>
+        <p>Restores the Linux desktop New Window action with a standard desktop action so dock and dashboard context menus show a single New Window item.</p>
       </description>
     </release>
   </releases>

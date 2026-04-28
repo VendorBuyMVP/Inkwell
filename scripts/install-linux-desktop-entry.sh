@@ -45,6 +45,11 @@ desktop_file="$APP_DIR/${APP_ID}.desktop"
   printf '%s\n' 'MimeType=text/markdown;text/x-markdown;application/x-markdown;'
   printf '%s\n' 'StartupNotify=true'
   printf 'StartupWMClass=%s\n' "$APP_ID"
+  printf '%s\n' 'Actions=new-window;'
+  printf '%s\n' ''
+  printf '%s\n' '[Desktop Action new-window]'
+  printf '%s\n' 'Name=New Window'
+  printf 'Exec=%s --new-window\n' "$BIN_DIR/inkwell"
 } > "$desktop_file"
 
 if command -v gsettings >/dev/null 2>&1; then

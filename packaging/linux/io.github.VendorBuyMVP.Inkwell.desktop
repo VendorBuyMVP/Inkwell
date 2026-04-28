@@ -10,3 +10,8 @@ Keywords=Markdown;Editor;Writing;Text;
 MimeType=text/markdown;text/x-markdown;application/x-markdown;
 StartupNotify=true
 StartupWMClass=io.github.VendorBuyMVP.Inkwell
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=inkwell --new-window
