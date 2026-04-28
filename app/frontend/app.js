@@ -13,6 +13,31 @@
   const MAX_PAGE_WIDTH_IN = 17;
   const PAGE_EXPANSION_MARGIN_IN = 0.5;
   const MAX_PREFERENCES_SHORTCUTS = 80;
+  const STATS_UPDATE_DELAY_MS = 200;
+  const ENTER_REPEAT_STALE_MS = 120;
+  const PARAGRAPH_INPUT_TYPES = new Set(["insertParagraph", "insertLineBreak"]);
+  const STATS_BLOCK_TAGS = new Set([
+    "blockquote",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+    "ul",
+  ]);
 
   const COMMANDS = [
     { id: "new", label: "New", shortcut: "Ctrl+N", run: () => newDocument() },
@@ -150,6 +175,8 @@
     name: "Untitled.md",
     dirty: false,
     statusTimer: null,
+    statsTimer: null,
+    statsPending: false,
     internalRender: false,
     activeMenu: null,
     marginDrag: null,
@@ -208,16 +235,25 @@
     });
   }
 
-  editor.addEventListener("input", () => {
+  editor.addEventListener("input", (event) => {
     if (state.internalRender) {
       return;
     }
-    normalizeLooseText();
-    transformActiveBlock();
-    state.dirty = true;
-    updateChrome();
-    updateStats();
-    scheduleSelectionToolbarUpdate();
+
+    const paragraphInput = isParagraphInput(event);
+    if (!paragraphInput) {
+      normalizeLooseText();
+    }
+
+    if (shouldTransformAfterInput(event)) {
+      transformActiveBlock();
+    }
+
+    markDirty();
+    scheduleStatsUpdate();
+    if (!paragraphInput) {
+      scheduleSelectionToolbarUpdate();
+    }
   });
 
   editor.addEventListener("paste", (event) => {
@@ -238,9 +274,8 @@
     } else {
       insertPlainTextAtSelection(text);
     }
-    state.dirty = true;
-    updateChrome();
-    updateStats();
+    markDirty();
+    scheduleStatsUpdate();
     scheduleSelectionToolbarUpdate();
   });
 
@@ -294,6 +329,11 @@
     }
 
     if (!shortcutModal.hidden) {
+      return;
+    }
+
+    if (shouldDropStaleEnterRepeat(event)) {
+      event.preventDefault();
       return;
     }
 
@@ -855,11 +895,12 @@
     }
 
     if (edited) {
-      state.dirty = true;
+      markDirty();
+      updateStatsNow();
+    } else {
+      updateChrome();
     }
 
-    updateChrome();
-    updateStats();
     scheduleSelectionToolbarUpdate();
   }
 
@@ -1005,6 +1046,7 @@
   });
 
   async function saveFile(saveAs) {
+    flushStatsUpdate();
     const content = getMarkdownContent();
 
     try {
@@ -1033,7 +1075,7 @@
     state.name = name || "Untitled.md";
     state.dirty = Boolean(markDirty);
     updateChrome();
-    updateStats();
+    updateStatsNow();
   }
 
   function renderMarkdown(markdown) {
@@ -1214,6 +1256,44 @@
     }
   }
 
+  function isParagraphInput(event) {
+    return Boolean(event && PARAGRAPH_INPUT_TYPES.has(event.inputType));
+  }
+
+  function shouldTransformAfterInput(event) {
+    if (!event || event.inputType === "insertFromPaste") {
+      return true;
+    }
+
+    if (isParagraphInput(event)) {
+      return false;
+    }
+
+    const data = event.data || "";
+    if (data && /[#*~`\[\]()|>\-+\d.: ]/.test(data)) {
+      return true;
+    }
+
+    const block = getActiveBlock();
+    if (!block || block.closest("pre")) {
+      return false;
+    }
+
+    return blockMayContainMarkdownTransform(block);
+  }
+
+  function blockMayContainMarkdownTransform(block) {
+    const raw = block.textContent || "";
+    return (
+      /^(#{1,6})\s+.+/.test(raw) ||
+      /^[-*+]\s+\[( |x|X)\]\s+.+/.test(raw) ||
+      /^[-*+]\s+.+/.test(raw) ||
+      /^\d+[.)]\s+.+/.test(raw) ||
+      raw.startsWith("> ") ||
+      hasCompleteInlineMarkdown(raw)
+    );
+  }
+
   function transformActiveBlock() {
     const block = getActiveBlock();
     if (!block || block.closest("pre")) {
@@ -1280,13 +1360,49 @@
       return;
     }
 
-    if (block.childNodes.length === 1 && block.firstChild.nodeType === Node.TEXT_NODE) {
+    if (
+      block.childNodes.length === 1 &&
+      block.firstChild.nodeType === Node.TEXT_NODE &&
+      hasCompleteInlineMarkdown(raw)
+    ) {
       const inline = window.InkwellMarkdown.parseInline(raw);
       if (inline.some((node) => node.type !== "text")) {
         renderInline(raw, block);
         placeCaretAtEnd(block);
       }
     }
+  }
+
+  function hasCompleteInlineMarkdown(raw) {
+    return /(\*\*[^*]+\*\*|~~[^~]+~~|`[^`]+`|\[[^\]]+\]\([^)]+\)|(^|[^*])\*[^*]+\*(?!\*))/.test(raw);
+  }
+
+  function shouldDropStaleEnterRepeat(event) {
+    if (
+      event.key !== "Enter" ||
+      !event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.isComposing
+    ) {
+      return false;
+    }
+
+    if (!selectionIsInsideEditor()) {
+      return false;
+    }
+
+    return getEventAgeMs(event) > ENTER_REPEAT_STALE_MS;
+  }
+
+  function getEventAgeMs(event) {
+    if (!event || typeof event.timeStamp !== "number") {
+      return 0;
+    }
+
+    const age = performance.now() - event.timeStamp;
+    return age >= 0 && age < 60000 ? age : 0;
   }
 
   function replaceBlock(block, tagName, content) {
@@ -2243,9 +2359,8 @@
   }
 
   function markEdited(message) {
-    state.dirty = true;
-    updateChrome();
-    updateStats();
+    markDirty();
+    updateStatsNow();
     if (message) {
       setStatus(message);
     }
@@ -2332,6 +2447,11 @@
   }
 
   function scheduleSelectionToolbarUpdate() {
+    const selection = window.getSelection();
+    if (selection && selection.isCollapsed && selectionToolbar.hidden && !state.savedRange) {
+      return;
+    }
+
     if (state.toolbarFrame) {
       return;
     }
@@ -2552,11 +2672,92 @@
     dirtyState.classList.toggle("is-dirty", state.dirty);
   }
 
+  function markDirty() {
+    if (state.dirty) {
+      return;
+    }
+    state.dirty = true;
+    updateChrome();
+  }
+
+  function scheduleStatsUpdate() {
+    state.statsPending = true;
+    if (state.statsTimer) {
+      return;
+    }
+
+    state.statsTimer = window.setTimeout(() => {
+      state.statsTimer = null;
+      if (!state.statsPending) {
+        return;
+      }
+      state.statsPending = false;
+      updateStats();
+    }, STATS_UPDATE_DELAY_MS);
+  }
+
+  function flushStatsUpdate() {
+    if (!state.statsPending) {
+      return;
+    }
+    updateStatsNow();
+  }
+
+  function updateStatsNow() {
+    if (state.statsTimer) {
+      window.clearTimeout(state.statsTimer);
+      state.statsTimer = null;
+    }
+    state.statsPending = false;
+    updateStats();
+  }
+
   function updateStats() {
-    const text = editor.textContent.trim();
-    const words = text ? text.split(/\s+/).length : 0;
-    const chars = getMarkdownContent().length;
+    const text = getRenderedStatsText();
+    const words = countRenderedWords(text);
+    const chars = countRenderedCharacters(text);
     documentStats.textContent = words + " words / " + chars + " chars";
+  }
+
+  function getRenderedStatsText() {
+    if (typeof editor.innerText === "string") {
+      return editor.innerText;
+    }
+    return getRenderedTextFromNode(editor);
+  }
+
+  function getRenderedTextFromNode(node) {
+    if (!node) {
+      return "";
+    }
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent || "";
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return "";
+    }
+
+    const tag = node.tagName.toLowerCase();
+    if (tag === "br") {
+      return "\n";
+    }
+
+    const childText = Array.from(node.childNodes).map((child) => getRenderedTextFromNode(child)).join("");
+    if (STATS_BLOCK_TAGS.has(tag)) {
+      return "\n" + childText + "\n";
+    }
+    return childText;
+  }
+
+  function countRenderedWords(text) {
+    const trimmed = String(text || "").trim();
+    return trimmed ? trimmed.split(/\s+/).length : 0;
+  }
+
+  function countRenderedCharacters(text) {
+    return String(text || "").replace(/\s+$/, "").length;
   }
 
   function setStatus(message) {
