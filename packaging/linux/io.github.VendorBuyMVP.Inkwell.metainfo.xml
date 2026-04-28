@@ -35,13 +35,13 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.4.1/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.4.2/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
-    <release version="0.4.1" date="2026-04-28">
+    <release version="0.4.2" date="2026-04-28">
       <description>
-        <p>Restores the Linux desktop New Window action with a standard desktop action so dock and dashboard context menus show a single New Window item.</p>
+        <p>Fixes a Markdown parser freeze caused by empty heading markers such as ## and prevents empty headings from being saved in a form that can hang on reopen.</p>
       </description>
     </release>
   </releases>

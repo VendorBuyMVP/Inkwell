@@ -42,9 +42,10 @@
         continue;
       }
 
-      const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+      const heading = line.match(/^\s{0,3}(#{1,6})(?:\s+(.*))?$/);
       if (heading) {
-        const children = parseInline(heading[2]);
+        const headingText = (heading[2] || "").replace(/\s+#+\s*$/, "").trim();
+        const children = parseInline(headingText);
         blocks.push({
           type: "heading",
           level: heading[1].length,
@@ -87,6 +88,10 @@
 
       const paragraphLines = [];
       while (index < lines.length && !isBlank(lines[index]) && !startsBlock(lines[index])) {
+        paragraphLines.push(lines[index].trim());
+        index += 1;
+      }
+      if (!paragraphLines.length) {
         paragraphLines.push(lines[index].trim());
         index += 1;
       }
@@ -223,7 +228,7 @@
   function startsBlock(line) {
     return Boolean(
       line.match(/^\s{0,3}(```+|~~~+)\s*([A-Za-z0-9_.-]*)\s*$/) ||
-        line.match(/^\s{0,3}#{1,6}\s+/) ||
+        line.match(/^\s{0,3}#{1,6}(?:\s+|$)/) ||
         line.match(/^\s{0,3}>\s?/) ||
         line.match(/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/) ||
         matchListItem(line)

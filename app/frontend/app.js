@@ -993,7 +993,8 @@
 
     const tag = node.tagName.toLowerCase();
     if (/^h[1-6]$/.test(tag)) {
-      return "#".repeat(Number(tag[1])) + " " + serializeInline(node).trim();
+      const text = serializeInline(node).trim();
+      return "#".repeat(Number(tag[1])) + (text ? " " + text : "");
     }
 
     if (tag === "p" || tag === "div") {
