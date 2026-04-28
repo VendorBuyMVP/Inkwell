@@ -22,5 +22,5 @@ jobs:
         run: python3 -c "import gi; gi.require_version('Gtk', '3.0'); gi.require_version('WebKit2', '4.1')"
       - name: Run checks
         run: npm run check
-      - name: Validate desktop entries
-        run: desktop-file-validate packaging/linux/inkwell.desktop packaging/linux/io.github.VendorBuyMVP.Inkwell.desktop
+      - name: Validate desktop entry
+        run: desktop-file-validate packaging/linux/io.github.VendorBuyMVP.Inkwell.desktop

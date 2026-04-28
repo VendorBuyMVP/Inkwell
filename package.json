@@ -1,15 +1,11 @@
 {
   "name": "inkwell",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "A simple local-first Markdown editor with no telemetry.",
   "license": "MIT",
   "scripts": {
     "linux:run": "bash scripts/run-linux.sh",
     "linux:install": "bash scripts/install-linux-desktop-entry.sh",
-    "experimental:linux-native:build": "bash scripts/build-linux-native.sh",
-    "experimental:linux-native:install": "bash scripts/install-linux-native-desktop-entry.sh",
-    "experimental:macos-native:build": "bash scripts/build-macos-native.sh",
-    "experimental:windows-native:build": "pwsh -File scripts/build-windows-native.ps1",
     "flatpak:build": "bash scripts/build-flatpak-local.sh",
     "flatpak:posture": "bash scripts/validate-flatpak-posture.sh",
     "test": "echo \"Public test files are not packaged; run npm run check for public verification.\"",

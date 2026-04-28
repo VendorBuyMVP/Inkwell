@@ -28,8 +28,10 @@ modules:
         skip:
           - .git
           - .github
+          - .flatpak-builder
           - AGENTS.md
           - build
-          - core/tests
+          - dist
           - docs
+          - node_modules
           - tests

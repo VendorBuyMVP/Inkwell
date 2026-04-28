@@ -6,7 +6,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ "$#" -gt 0 ]]; then
   targets=("$@")
 else
-  targets=("$ROOT_DIR/build/linux-native" "$ROOT_DIR/build/macos-native" "$ROOT_DIR/build/windows-native")
+  targets=(
+    "$ROOT_DIR/build/flatpak-io.github.VendorBuyMVP.Inkwell/files/app"
+    "$ROOT_DIR/build/flatpak-io.github.VendorBuyMVP.Inkwell/files/bin"
+    "$ROOT_DIR/build/flatpak-io.github.VendorBuyMVP.Inkwell/files/share/applications"
+  )
 fi
 
 found=0

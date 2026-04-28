@@ -11,29 +11,17 @@ const runtimeFiles = [
   "app/frontend/styles.css",
   "scripts/run-linux.sh",
   "scripts/install-linux-desktop-entry.sh",
-  "scripts/install-linux-native-desktop-entry.sh",
-  "scripts/build-core.sh",
-  "scripts/build-linux-native.sh",
-  "scripts/build-macos-native.sh",
-  "scripts/build-windows-native.ps1",
-  "packaging/linux/inkwell.desktop",
-  ".github/workflows/native-build.yml",
+  "scripts/build-flatpak-local.sh",
+  "scripts/validate-flatpak-posture.sh",
+  "packaging/flatpak/io.github.VendorBuyMVP.Inkwell.yml",
+  "packaging/linux/io.github.VendorBuyMVP.Inkwell.desktop",
+  ".github/workflows/linux-webkit-build.yml",
   "package.json",
 ];
 
-for (const path of ["core/include", "core/src", "shells"]) {
-  try {
-    runtimeFiles.push(
-      ...collectFiles(path).filter((file) => /\.(c|h|m|mm|swift|cpp|hpp|rc|xml|desktop|sh|ps1)$/.test(file)),
-    );
-  } catch (_error) {
-    // Optional platform directories may not exist in early checkouts.
-  }
-}
-
 for (const path of ["packaging"]) {
   runtimeFiles.push(
-    ...collectFiles(path).filter((file) => /\.(desktop|plist|manifest|rc)$/.test(file)),
+    ...collectFiles(path).filter((file) => /\.desktop$/.test(file)),
   );
 }
 
@@ -54,7 +42,7 @@ const bannedPatterns = [
   [/\btelemetry\b/i, "telemetry"],
   [/\banalytics\b/i, "analytics"],
   [/\btracking pixel\b/i, "tracking pixel"],
-  [/\brequests\b|\burllib\.request\b/, "Python HTTP client"],
+  [/\bimport\s+requests\b|\bfrom\s+requests\b|\burllib\.request\b/, "Python HTTP client"],
   [/\bsocket\b/, "socket API"],
   [/\bsubprocess\b|\bPopen\b|\bos\.system\b/, "process spawning"],
   [/\bopenExternal\b/, "external URL opener"],
@@ -63,11 +51,13 @@ const bannedPatterns = [
 
 const allowedUrlFragments = new Map([
   ["app/inkwell.py", ["http://127.0.0.1:9"]],
-  ["core/src/inkwell_core.c", ["http://", "https://"]],
+  ["scripts/build-flatpak-local.sh", ["https://dl.flathub.org/media"]],
 ]);
 
 const allowedTextFragments = new Map([
   ["package.json", ["no telemetry"]],
+  ["packaging/flatpak/io.github.VendorBuyMVP.Inkwell.yml", ["--socket=wayland", "--socket=fallback-x11"]],
+  ["scripts/validate-flatpak-posture.sh", ["--socket=wayland", "Wayland socket", "--socket=fallback-x11", "--socket=x11"]],
 ]);
 
 function collectFiles(path) {

@@ -6,7 +6,6 @@ node_modules/
 dist/
 build/
 tests/
-core/tests/
 .env
 *.log
 docs/
