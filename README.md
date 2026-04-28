@@ -4,8 +4,6 @@ Inkwell is a local Markdown editor for Linux.
 
 It stores Markdown files locally and does not require accounts, sync, telemetry, or remote services. The current app uses GTK and WebKitGTK.
 
-Only Linux is supported right now.
-
 ## Features
 
 - Open, save, save as, and new document workflows
