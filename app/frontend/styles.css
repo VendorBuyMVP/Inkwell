@@ -231,6 +231,91 @@ body.ruler-hidden .app-shell {
   color: var(--accent);
 }
 
+.findbar {
+  position: fixed;
+  top: 34px;
+  right: 14px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(560px, calc(100vw - 28px));
+  min-height: 36px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--menu-bg);
+  color: var(--page-text);
+  box-shadow: var(--shadow);
+}
+
+.findbar[hidden] {
+  display: none;
+}
+
+.findbar-label {
+  flex: 0 0 auto;
+  color: var(--page-muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 5px;
+}
+
+.find-input {
+  flex: 1 1 auto;
+  min-width: 110px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--page-bg);
+  color: var(--page-text);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 9px;
+}
+
+.find-input:focus {
+  border-color: var(--accent);
+  outline: 3px solid var(--focus);
+  outline-offset: 0;
+}
+
+.find-count {
+  flex: 0 0 auto;
+  min-width: 56px;
+  color: var(--page-muted);
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.find-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--page-text);
+  cursor: default;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+
+.find-button:hover,
+.find-button:focus-visible {
+  background: var(--menu-hover);
+}
+
+.find-button:disabled {
+  color: var(--page-muted);
+  opacity: 0.45;
+}
+
 .ruler {
   position: relative;
   z-index: 2;
@@ -554,6 +639,29 @@ body[data-theme="light"] .editor tr:nth-child(even) td {
   display: none;
 }
 
+.find-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.find-overlay[hidden] {
+  display: none;
+}
+
+.find-match {
+  position: fixed;
+  border-radius: 3px;
+  background: rgba(198, 161, 91, 0.28);
+  box-shadow: 0 0 0 1px rgba(198, 161, 91, 0.22);
+}
+
+.find-match.is-active {
+  background: rgba(198, 161, 91, 0.48);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
 .selection-toolbar {
   position: fixed;
   z-index: 30;
@@ -822,6 +930,7 @@ body[data-theme="light"] .modal-button.danger {
 .menu-title:focus-visible,
 .menu-item:focus-visible,
 .ruler-handle:focus-visible,
+.find-button:focus-visible,
 .tool-button:focus-visible,
 .table-menu-item:focus-visible,
 .modal-button:focus-visible {
@@ -853,6 +962,16 @@ body[data-theme="light"] .modal-button.danger {
 
   .document-scroll {
     padding: 18px 14px 54px;
+  }
+
+  .findbar {
+    top: 36px;
+    right: 8px;
+    width: calc(100vw - 16px);
+  }
+
+  .findbar-label {
+    display: none;
   }
 
   .shortcut-row {

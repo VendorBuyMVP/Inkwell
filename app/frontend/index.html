@@ -36,6 +36,10 @@
                 <button class="menu-item" type="button" role="menuitem" data-command="undo">Undo</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="redo">Redo</button>
                 <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="find">Find</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="findNext">Find Next</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="findPrevious">Find Previous</button>
+                <span class="menu-separator" aria-hidden="true"></span>
                 <button class="menu-item" type="button" role="menuitem" data-command="selectAll">Select All</button>
               </div>
             </div>
@@ -99,6 +103,22 @@
         </div>
       </header>
 
+      <section class="findbar" id="findBar" role="search" aria-label="Find in document" hidden>
+        <label class="findbar-label" for="findInput">Find</label>
+        <input
+          id="findInput"
+          class="find-input"
+          type="search"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Find text"
+        >
+        <span class="find-count" id="findCount" aria-live="polite">0 / 0</span>
+        <button class="find-button" id="findPreviousButton" type="button" aria-label="Previous match" title="Previous match">&uarr;</button>
+        <button class="find-button" id="findNextButton" type="button" aria-label="Next match" title="Next match">&darr;</button>
+        <button class="find-button" id="findCloseButton" type="button" aria-label="Close find" title="Close find">&times;</button>
+      </section>
+
       <section class="ruler" id="ruler" aria-label="Page ruler">
         <div class="ruler-track" id="rulerTrack">
           <div class="ruler-margin left" id="leftMarginShade"></div>
@@ -130,6 +150,8 @@
     </div>
 
     <input id="fileInput" class="hidden-file-input" type="file" accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain">
+
+    <div class="find-overlay" id="findOverlay" aria-hidden="true"></div>
 
     <div class="selection-toolbar" id="selectionToolbar" role="toolbar" aria-label="Markdown formatting" hidden>
       <button class="tool-button strong" type="button" data-toolbar-action="bold" aria-label="Bold" title="Bold">B</button>

@@ -10,6 +10,7 @@ It stores Markdown files locally and does not require accounts, sync, telemetry,
 
 - Open, save, save as, and new document workflows
 - Multi-window editing
+- Find in document with keyboard navigation
 - Dark and light themes
 - Keyboard shortcuts
 - Markdown formatting for headings, emphasis, lists, quotes, code blocks, tables, task lists, and horizontal rules

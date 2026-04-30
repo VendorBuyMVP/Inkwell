@@ -35,10 +35,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.5.3/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.6.0/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.6.0" date="2026-04-30">
+      <description>
+        <p>Adds in-document Find with Ctrl+F, rendered-text matching, next and previous navigation, match counts, and dark-mode-consistent highlights.</p>
+      </description>
+    </release>
     <release version="0.5.3" date="2026-04-28">
       <description>
         <p>Removes obsolete experimental native shell prototypes and stale platform packaging files from the public source tree so the repository matches the current Linux WebKit app.</p>

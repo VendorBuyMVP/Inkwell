@@ -15,6 +15,8 @@
   const MAX_PREFERENCES_SHORTCUTS = 80;
   const STATS_UPDATE_DELAY_MS = 200;
   const ENTER_REPEAT_STALE_MS = 120;
+  const FIND_RENDER_DELAY_MS = 50;
+  const MAX_FIND_RECTS = 2000;
   const PARAGRAPH_INPUT_TYPES = new Set(["insertParagraph", "insertLineBreak"]);
   const STATS_BLOCK_TAGS = new Set([
     "blockquote",
@@ -38,6 +40,21 @@
     "tr",
     "ul",
   ]);
+  const FIND_BOUNDARY_TAGS = new Set([
+    "blockquote",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "p",
+    "pre",
+    "td",
+    "th",
+  ]);
 
   const COMMANDS = [
     { id: "new", label: "New", shortcut: "Ctrl+N", run: () => newDocument() },
@@ -47,6 +64,9 @@
     { id: "saveAs", label: "Save As", shortcut: "Ctrl+Shift+S", run: () => saveFile(true) },
     { id: "undo", label: "Undo", shortcut: "Ctrl+Z", action: "undo", scope: "editor" },
     { id: "redo", label: "Redo", shortcut: "Ctrl+Shift+Z", action: "redo", scope: "editor" },
+    { id: "find", label: "Find", shortcut: "Ctrl+F", run: () => openFindBar() },
+    { id: "findNext", label: "Find Next", shortcut: "Ctrl+G", run: () => goToFindMatch(1) },
+    { id: "findPrevious", label: "Find Previous", shortcut: "Ctrl+Shift+G", run: () => goToFindMatch(-1) },
     { id: "selectAll", label: "Select All", shortcut: "Ctrl+A", action: "selectAll", scope: "editor" },
     { id: "zoomIn", label: "Zoom In", shortcut: "Ctrl+=", action: "zoomIn" },
     { id: "zoomOut", label: "Zoom Out", shortcut: "Ctrl+-", action: "zoomOut" },
@@ -134,6 +154,13 @@
   const shortcutDefaultsButton = document.getElementById("shortcutDefaultsButton");
   const shortcutCancelButton = document.getElementById("shortcutCancelButton");
   const shortcutSaveButton = document.getElementById("shortcutSaveButton");
+  const findBar = document.getElementById("findBar");
+  const findInput = document.getElementById("findInput");
+  const findCount = document.getElementById("findCount");
+  const findPreviousButton = document.getElementById("findPreviousButton");
+  const findNextButton = document.getElementById("findNextButton");
+  const findCloseButton = document.getElementById("findCloseButton");
+  const findOverlay = document.getElementById("findOverlay");
   const selectionToolbar = document.getElementById("selectionToolbar");
   const tableContextMenu = document.getElementById("tableContextMenu");
   const menuRoots = Array.from(document.querySelectorAll("[data-menu-root]"));
@@ -187,6 +214,11 @@
     toolbarFrame: null,
     tableContext: null,
     tableSelection: null,
+    findQuery: createFindQuery(""),
+    findMatches: [],
+    findActiveIndex: -1,
+    findRefreshTimer: null,
+    findOverlayTimer: null,
     shortcuts: createDefaultShortcutMap(),
     shortcutPreferencesLoaded: false,
   };
@@ -252,6 +284,7 @@
 
     markDirty();
     scheduleStatsUpdate();
+    scheduleFindRefresh();
     if (!paragraphInput) {
       scheduleSelectionToolbarUpdate();
     }
@@ -277,6 +310,7 @@
     }
     markDirty();
     scheduleStatsUpdate();
+    scheduleFindRefresh();
     scheduleSelectionToolbarUpdate();
   });
 
@@ -308,6 +342,10 @@
   });
 
   document.addEventListener("selectionchange", () => {
+    if (!findBar.hidden) {
+      hideSelectionToolbar();
+      return;
+    }
     scheduleSelectionToolbarUpdate();
     updateSelectedTableCells();
   });
@@ -320,6 +358,10 @@
       }
       if (!confirmModal.hidden) {
         closeConfirm(false);
+        return;
+      }
+      if (!findBar.hidden) {
+        closeFindBar();
         return;
       }
       hideSelectionToolbar();
@@ -375,12 +417,14 @@
     updateLayout();
     scheduleSelectionToolbarUpdate();
     hideTableContextMenu();
+    scheduleFindOverlayRender();
   });
 
   documentScroll.addEventListener("scroll", () => {
     syncRulerScrollFromDocument();
     scheduleSelectionToolbarUpdate();
     hideTableContextMenu();
+    scheduleFindOverlayRender();
   });
 
   ruler.addEventListener("scroll", syncDocumentScrollFromRuler);
@@ -414,6 +458,22 @@
       closeShortcutDialog();
     }
   });
+  findInput.addEventListener("input", () => {
+    rebuildFindMatches(true);
+    focusFindInput(false);
+  });
+  findInput.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeFindBar();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      goToFindMatch(event.shiftKey ? -1 : 1);
+    }
+  });
+  findPreviousButton.addEventListener("click", () => goToFindMatch(-1));
+  findNextButton.addEventListener("click", () => goToFindMatch(1));
+  findCloseButton.addEventListener("click", closeFindBar);
 
   function setupMenuItems() {
     for (const button of commandButtons) {
@@ -821,6 +881,350 @@
     editor.focus();
   }
 
+  function openFindBar() {
+    closeAllMenus();
+    hideSelectionToolbar();
+    hideTableContextMenu();
+    clearTableSelection();
+
+    const selectedText = getSelectedText();
+    if (selectedText && !/[\r\n]/.test(selectedText) && selectedText.length <= 120) {
+      state.findQuery = createFindQuery(selectedText);
+      findInput.value = selectedText;
+    } else if (findInput.value !== getFindQueryText()) {
+      findInput.value = getFindQueryText();
+    }
+
+    findBar.hidden = false;
+    findOverlay.hidden = false;
+    rebuildFindMatches(true, { scrollActive: true });
+    focusFindInput(true);
+  }
+
+  function closeFindBar() {
+    findBar.hidden = true;
+    findOverlay.hidden = true;
+    clearFindTimers();
+    findOverlay.replaceChildren();
+    findInput.blur();
+    editor.focus();
+  }
+
+  function goToFindMatch(direction) {
+    if (findBar.hidden) {
+      openFindBar();
+    }
+
+    if (!getFindQueryText()) {
+      focusFindInput(false);
+      return;
+    }
+
+    if (!state.findMatches.length) {
+      rebuildFindMatches(true);
+    }
+
+    const count = state.findMatches.length;
+    if (!count) {
+      updateFindControls();
+      focusFindInput(false);
+      return;
+    }
+
+    const nextIndex = state.findActiveIndex < 0
+      ? (direction < 0 ? count - 1 : 0)
+      : (state.findActiveIndex + direction + count) % count;
+    activateFindMatch(nextIndex, true);
+    focusFindInput(false);
+  }
+
+  function scheduleFindRefresh() {
+    if (findBar.hidden) {
+      return;
+    }
+
+    if (state.findRefreshTimer) {
+      return;
+    }
+
+    state.findRefreshTimer = window.setTimeout(() => {
+      state.findRefreshTimer = null;
+      rebuildFindMatches(false);
+    }, FIND_RENDER_DELAY_MS);
+  }
+
+  function scheduleFindOverlayRender() {
+    if (findBar.hidden || state.findOverlayTimer) {
+      return;
+    }
+
+    state.findOverlayTimer = window.setTimeout(() => {
+      state.findOverlayTimer = null;
+      renderFindOverlay();
+    }, FIND_RENDER_DELAY_MS);
+  }
+
+  function clearFindTimers() {
+    if (state.findRefreshTimer) {
+      window.clearTimeout(state.findRefreshTimer);
+      state.findRefreshTimer = null;
+    }
+    if (state.findOverlayTimer) {
+      window.clearTimeout(state.findOverlayTimer);
+      state.findOverlayTimer = null;
+    }
+  }
+
+  function createFindQuery(rawValue) {
+    return {
+      text: String(rawValue || ""),
+      caseSensitive: false,
+      wholeWord: false,
+      regexp: false,
+    };
+  }
+
+  function getFindQueryText() {
+    return state.findQuery && typeof state.findQuery === "object" ? state.findQuery.text : String(state.findQuery || "");
+  }
+
+  function focusFindInput(selectText) {
+    findInput.focus();
+    if (selectText) {
+      findInput.select();
+    }
+  }
+
+  function rebuildFindMatches(resetActive, options = {}) {
+    const query = createFindQuery(findInput.value);
+    state.findQuery = query;
+    state.findMatches = query.text ? findLiteralMatches(query, collectFindUnits()) : [];
+    setActiveFindIndexAfterRebuild(resetActive);
+    if (state.findActiveIndex >= 0 && options.scrollActive) {
+      activateFindMatch(state.findActiveIndex, true);
+      return;
+    }
+
+    updateFindControls();
+    renderFindOverlay();
+  }
+
+  function setActiveFindIndexAfterRebuild(resetActive) {
+    if (state.findMatches.length) {
+      state.findActiveIndex = resetActive
+        ? 0
+        : clamp(state.findActiveIndex, 0, state.findMatches.length - 1);
+    } else {
+      state.findActiveIndex = -1;
+    }
+  }
+
+  function findLiteralMatches(query, units) {
+    const needle = normalizeFindText(query.text, query);
+    const matches = [];
+
+    for (const unit of units) {
+      const haystack = normalizeFindText(unit.text, query);
+      let index = haystack.indexOf(needle);
+      while (index !== -1) {
+        const start = getFindPosition(unit, index);
+        const end = getFindPosition(unit, index + query.text.length);
+        if (start && end) {
+          matches.push(createFindMatch(start, end, unit, index));
+        }
+        index = haystack.indexOf(needle, index + Math.max(query.text.length, 1));
+      }
+    }
+
+    return matches;
+  }
+
+  function normalizeFindText(value, query) {
+    const text = String(value || "");
+    return query.caseSensitive ? text : text.toLowerCase();
+  }
+
+  function createFindMatch(start, end, unit, index) {
+    return {
+      startNode: start.node,
+      startOffset: start.offset,
+      endNode: end.node,
+      endOffset: end.offset,
+      unit,
+      unitOffset: index,
+    };
+  }
+
+  function collectFindUnits() {
+    const units = [];
+    for (const child of editor.childNodes) {
+      collectFindUnitsFromNode(child, units);
+    }
+    return units;
+  }
+
+  function collectFindUnitsFromNode(node, units) {
+    if (!node) {
+      return;
+    }
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      appendFindUnit(node, units);
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return;
+    }
+
+    const tag = node.tagName.toLowerCase();
+    if (tag === "br" || tag === "script" || tag === "style") {
+      return;
+    }
+
+    if (FIND_BOUNDARY_TAGS.has(tag)) {
+      appendFindUnit(node, units);
+      return;
+    }
+
+    for (const child of node.childNodes) {
+      collectFindUnitsFromNode(child, units);
+    }
+  }
+
+  function appendFindUnit(root, units) {
+    const segments = [];
+    let text = "";
+
+    if (root.nodeType === Node.TEXT_NODE) {
+      const value = root.textContent || "";
+      if (value) {
+        segments.push({ node: root, start: 0, end: value.length });
+        units.push({ text: value, segments });
+      }
+      return;
+    }
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let textNode = walker.nextNode();
+    while (textNode) {
+      const value = textNode.textContent || "";
+      if (value) {
+        const start = text.length;
+        text += value;
+        segments.push({ node: textNode, start, end: text.length });
+      }
+      textNode = walker.nextNode();
+    }
+
+    if (text) {
+      units.push({ text, segments });
+    }
+  }
+
+  function getFindPosition(unit, offset) {
+    for (let index = 0; index < unit.segments.length; index += 1) {
+      const segment = unit.segments[index];
+      const isLast = index === unit.segments.length - 1;
+      if ((offset >= segment.start && offset <= segment.end) || (isLast && offset >= segment.end)) {
+        return {
+          node: segment.node,
+          offset: clamp(offset - segment.start, 0, segment.end - segment.start),
+        };
+      }
+    }
+    return null;
+  }
+
+  function activateFindMatch(index, scrollIntoView) {
+    if (index < 0 || index >= state.findMatches.length) {
+      state.findActiveIndex = -1;
+      updateFindControls();
+      renderFindOverlay();
+      return;
+    }
+
+    state.findActiveIndex = index;
+    const range = createRangeFromFindMatch(state.findMatches[index]);
+    if (range) {
+      if (scrollIntoView) {
+        scrollFindRangeIntoView(range);
+      }
+    }
+
+    updateFindControls();
+    renderFindOverlay();
+  }
+
+  function createRangeFromFindMatch(match) {
+    try {
+      const range = document.createRange();
+      range.setStart(match.startNode, match.startOffset);
+      range.setEnd(match.endNode, match.endOffset);
+      return range;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function scrollFindRangeIntoView(range) {
+    const rect = getRangeRect(range);
+    if (!rect) {
+      return;
+    }
+
+    const scrollRect = documentScroll.getBoundingClientRect();
+    const targetY = rect.top - scrollRect.top - scrollRect.height / 2 + rect.height / 2;
+    const targetX = rect.left - scrollRect.left - scrollRect.width / 2 + rect.width / 2;
+    if (rect.top < scrollRect.top + 42 || rect.bottom > scrollRect.bottom - 42) {
+      documentScroll.scrollTop += targetY;
+    }
+    if (rect.left < scrollRect.left + 24 || rect.right > scrollRect.right - 24) {
+      documentScroll.scrollLeft += targetX;
+    }
+  }
+
+  function updateFindControls() {
+    const count = state.findMatches.length;
+    findCount.textContent = count ? state.findActiveIndex + 1 + " / " + count : "0 / 0";
+    findPreviousButton.disabled = count === 0;
+    findNextButton.disabled = count === 0;
+  }
+
+  function renderFindOverlay() {
+    findOverlay.replaceChildren();
+    if (findBar.hidden || !state.findMatches.length) {
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    let rectCount = 0;
+    for (let index = 0; index < state.findMatches.length && rectCount < MAX_FIND_RECTS; index += 1) {
+      const range = createRangeFromFindMatch(state.findMatches[index]);
+      if (!range) {
+        continue;
+      }
+
+      for (const rect of range.getClientRects()) {
+        if (rect.width < 1 || rect.height < 1) {
+          continue;
+        }
+        const marker = document.createElement("span");
+        marker.className = "find-match" + (index === state.findActiveIndex ? " is-active" : "");
+        marker.style.left = rect.left + "px";
+        marker.style.top = rect.top + "px";
+        marker.style.width = rect.width + "px";
+        marker.style.height = rect.height + "px";
+        fragment.append(marker);
+        rectCount += 1;
+        if (rectCount >= MAX_FIND_RECTS) {
+          break;
+        }
+      }
+    }
+    findOverlay.append(fragment);
+  }
+
   function runMenuAction(action) {
     ensureEditorFocus();
     let edited = EDITING_ACTIONS.has(action);
@@ -898,6 +1302,7 @@
     if (edited) {
       markDirty();
       updateStatsNow();
+      scheduleFindRefresh();
     } else {
       updateChrome();
     }
@@ -1080,6 +1485,7 @@
     state.savedToDisk = Boolean(savedToDisk);
     updateChrome();
     updateStatsNow();
+    scheduleFindRefresh();
   }
 
   function renderMarkdown(markdown) {
@@ -2365,6 +2771,7 @@
   function markEdited(message) {
     markDirty();
     updateStatsNow();
+    scheduleFindRefresh();
     if (message) {
       setStatus(message);
     }
@@ -2607,6 +3014,7 @@
     updateRulerLabels();
     updateRulerGeometry(marginLeftPx, marginRightPx);
     syncRulerScrollFromDocument();
+    scheduleFindOverlayRender();
   }
 
   function updateRulerLabels() {
