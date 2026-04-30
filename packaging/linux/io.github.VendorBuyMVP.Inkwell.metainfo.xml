@@ -35,10 +35,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.6.0/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.6.1/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.6.1" date="2026-04-30">
+      <description>
+        <p>Replaces browser-native undo with Inkwell's own in-memory undo and redo history, improving reliability for code blocks, table edits, paste handling, Markdown transforms, and formatting actions.</p>
+      </description>
+    </release>
     <release version="0.6.0" date="2026-04-30">
       <description>
         <p>Adds in-document Find with Ctrl+F, rendered-text matching, next and previous navigation, match counts, and dark-mode-consistent highlights.</p>
