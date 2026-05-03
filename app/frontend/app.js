@@ -127,6 +127,12 @@
     { id: "keyboardShortcuts", label: "Keyboard Shortcuts", shortcut: "Ctrl+,", run: () => openShortcutDialog() },
   ];
 
+  const isMacPlatform = /\bMac|iPhone|iPad|iPod\b/.test(
+    String(navigator.platform || navigator.userAgent || "")
+  );
+  const systemThemeQuery = typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: light)")
+    : null;
   const commandById = new Map(COMMANDS.map((command) => [command.id, command]));
   const editableShortcutCommands = COMMANDS.filter((command) => command.editable !== false && command.shortcut);
   const keyAliases = new Map([
@@ -220,7 +226,8 @@
   ]);
 
   const documentSettings = {
-    theme: "dark",
+    theme: getSystemThemePreference(),
+    themeOverride: null,
     pageWidthIn: 8.5,
     pageHeightIn: 11,
     marginLeftIn: 1,
@@ -504,6 +511,7 @@
     });
   }
 
+  setupSystemThemeListener();
   loadDocument(DEFAULT_DOCUMENT, "Untitled.md", false, false);
   updateLayout();
   editor.focus();
@@ -621,6 +629,8 @@
     return true;
   }
 
+  window.InkwellInvokeCommand = (commandId) => invokeCommand(String(commandId || ""));
+
   function commandIsAvailable(command, event) {
     if (command.id === "undo" || command.id === "redo") {
       return !eventTargetsStandaloneTextEntry(event);
@@ -641,7 +651,7 @@
   function createDefaultShortcutMap() {
     const shortcuts = new Map();
     for (const command of editableShortcutCommands) {
-      shortcuts.set(command.id, normalizeShortcutText(command.shortcut));
+      shortcuts.set(command.id, normalizeDefaultShortcutText(command.shortcut));
     }
     return shortcuts;
   }
@@ -652,7 +662,7 @@
       const shortcut = command ? getShortcutText(command.id) : "";
       const shortcutEl = button.querySelector(".menu-shortcut");
       if (shortcutEl) {
-        shortcutEl.textContent = shortcut === "None" ? "" : shortcut;
+        shortcutEl.textContent = shortcut === "None" ? "" : shortcutToPlatformText(shortcut);
       }
     }
   }
@@ -680,11 +690,14 @@
   }
 
   function eventMatchesShortcut(event, shortcut) {
+    const modifierMatch = shortcut.ctrl && !shortcut.meta && isMacPlatform
+      ? Boolean(event.metaKey) && !Boolean(event.ctrlKey)
+      : Boolean(event.ctrlKey) === shortcut.ctrl && Boolean(event.metaKey) === shortcut.meta;
+
     return (
-      Boolean(event.ctrlKey) === shortcut.ctrl &&
+      modifierMatch &&
       Boolean(event.shiftKey) === shortcut.shift &&
       Boolean(event.altKey) === shortcut.alt &&
-      Boolean(event.metaKey) === shortcut.meta &&
       shortcutKeysMatch(shortcut.key, normalizeEventKey(event.key))
     );
   }
@@ -700,6 +713,20 @@
   function normalizeShortcutText(text) {
     const parsed = parseShortcutText(text);
     return parsed ? shortcutToText(parsed) : "None";
+  }
+
+  function normalizeDefaultShortcutText(text) {
+    const parsed = parseShortcutText(text);
+    if (!parsed) {
+      return "None";
+    }
+
+    if (isMacPlatform && parsed.ctrl && !parsed.meta) {
+      parsed.ctrl = false;
+      parsed.meta = true;
+    }
+
+    return shortcutToText(parsed);
   }
 
   function parseShortcutText(text) {
@@ -766,10 +793,33 @@
       parts.push("Shift");
     }
     if (shortcut.alt) {
-      parts.push("Alt");
+      parts.push(isMacPlatform ? "Option" : "Alt");
     }
     if (shortcut.meta) {
-      parts.push("Meta");
+      parts.push(isMacPlatform ? "Command" : "Meta");
+    }
+    parts.push(keyDisplay.get(shortcut.key) || (/^[a-z]$/.test(shortcut.key) ? shortcut.key.toUpperCase() : shortcut.key));
+    return parts.join("+");
+  }
+
+  function shortcutToPlatformText(text) {
+    const shortcut = parseShortcutText(text);
+    if (!shortcut) {
+      return "None";
+    }
+
+    const parts = [];
+    if (shortcut.ctrl) {
+      parts.push(isMacPlatform && !shortcut.meta ? "Command" : "Ctrl");
+    }
+    if (shortcut.shift) {
+      parts.push("Shift");
+    }
+    if (shortcut.alt) {
+      parts.push(isMacPlatform ? "Option" : "Alt");
+    }
+    if (shortcut.meta) {
+      parts.push(isMacPlatform ? "Command" : "Meta");
     }
     parts.push(keyDisplay.get(shortcut.key) || (/^[a-z]$/.test(shortcut.key) ? shortcut.key.toUpperCase() : shortcut.key));
     return parts.join("+");
@@ -3597,10 +3647,38 @@
     }
   }
 
+  function getSystemThemePreference() {
+    return systemThemeQuery && systemThemeQuery.matches ? "light" : "dark";
+  }
+
+  function setupSystemThemeListener() {
+    if (!systemThemeQuery) {
+      return;
+    }
+
+    const updateSystemTheme = () => {
+      if (documentSettings.themeOverride) {
+        return;
+      }
+      applyTheme(getSystemThemePreference());
+    };
+
+    if (typeof systemThemeQuery.addEventListener === "function") {
+      systemThemeQuery.addEventListener("change", updateSystemTheme);
+    } else if (typeof systemThemeQuery.addListener === "function") {
+      systemThemeQuery.addListener(updateSystemTheme);
+    }
+  }
+
   function setTheme(theme) {
+    documentSettings.themeOverride = theme;
+    applyTheme(theme);
+    setStatus(theme === "light" ? "Light theme" : "Dark theme");
+  }
+
+  function applyTheme(theme) {
     documentSettings.theme = theme;
     document.body.dataset.theme = theme;
-    setStatus(theme === "light" ? "Light theme" : "Dark theme");
   }
 
   function setPageSize(widthIn, heightIn) {

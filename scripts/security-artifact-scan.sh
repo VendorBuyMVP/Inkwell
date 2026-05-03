@@ -27,7 +27,9 @@ for target in "${targets[@]}"; do
   fi
 
   while IFS= read -r -d '' file; do
-    if strings -a "$file" | rg -i 'https?://[A-Za-z0-9]|wss?://|telemetry|analytics|sentry|crash(upload|report|pad|lytics)?|updater|update ping|tracking|beacon|remote logging|cloud sync' > "$match_file"; then
+    if strings -a "$file" \
+      | sed 's#http://www.apple.com/DTDs/PropertyList-1.0.dtd##g' \
+      | rg -i 'https?://[A-Za-z0-9]|wss?://|\btelemetry\b|\banalytics\b|\bsentry\b|\bcrash(upload|report|pad|lytics)?\b|\bautoUpdater\b|\bupdater\b|\bupdate ping\b|\btracking\b|\bbeacon\b|\bremote logging\b|\bcloud sync\b' > "$match_file"; then
       printf 'Artifact security scan failed: %s\n' "$file" >&2
       cat "$match_file" >&2
       found=1

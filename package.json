@@ -1,11 +1,16 @@
 {
   "name": "inkwell",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "A simple local-first Markdown editor with no telemetry.",
   "license": "MIT",
   "scripts": {
     "linux:run": "bash scripts/run-linux.sh",
     "linux:install": "bash scripts/install-linux-desktop-entry.sh",
+    "macos:build": "bash scripts/build-macos-local.sh",
+    "macos:build:sandbox": "bash scripts/build-macos-local.sh --sandbox",
+    "macos:entitlements": "npm run macos:build:sandbox && bash scripts/check-macos-entitlements.sh build/macos-local/Inkwell.app",
+    "macos:check": "npm run macos:smoke",
+    "macos:smoke": "bash scripts/smoke-macos-local.sh",
     "flatpak:build": "bash scripts/build-flatpak-local.sh",
     "flatpak:posture": "bash scripts/validate-flatpak-posture.sh",
     "test": "echo \"Public test files are not packaged; run npm run check for public verification.\"",

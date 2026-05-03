@@ -1,0 +1,470 @@
+import AppKit
+import UniformTypeIdentifiers
+import WebKit
+
+final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNavigationDelegate {
+    private let bridge = InkwellBridge()
+    private var webView: WKWebView!
+    private var currentDocumentURL: URL?
+    private var initialDocumentURL: URL?
+    private var diagnosticsURL: URL?
+    private var frontendReady = false
+    private var frontendLoadStarted = false
+    private var allowWindowClose = false
+
+    convenience init(initialDocumentURL: URL? = nil, diagnosticsURL: URL? = nil) {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 780),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        self.init(window: window)
+        self.initialDocumentURL = initialDocumentURL
+        self.diagnosticsURL = diagnosticsURL
+        configureWindow()
+        configureWebView()
+    }
+
+    func newFile() -> [String: JSONValue] {
+        currentDocumentURL = nil
+        window?.title = "Inkwell"
+        return ["name": .string("Untitled.md")]
+    }
+
+    func newWindow() {
+        (NSApp.delegate as? AppDelegate)?.newWindow()
+    }
+
+    func openFile() throws -> [String: JSONValue] {
+        let panel = NSOpenPanel()
+        panel.title = "Open Markdown"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = DocumentAccess.allowedContentTypes
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            throw InkwellError.cancelled
+        }
+
+        return try openDocument(at: url)
+    }
+
+    func openDocument(at url: URL) throws -> [String: JSONValue] {
+        let document = try DocumentAccess.readDocument(at: url)
+        currentDocumentURL = url
+        window?.representedURL = url
+        window?.title = document.name
+        return [
+            "name": .string(document.name),
+            "content": .string(document.content)
+        ]
+    }
+
+    func saveFile(payload: [String: JSONValue]?, forceDialog: Bool) throws -> [String: JSONValue] {
+        let content = payload?["content"]?.stringValue ?? ""
+        let suggestedName = payload?["name"]?.stringValue ?? "Untitled.md"
+
+        let url: URL
+        if forceDialog || currentDocumentURL == nil {
+            url = try chooseSaveURL(suggestedName: suggestedName)
+        } else {
+            url = currentDocumentURL!
+        }
+
+        try DocumentAccess.writeDocument(content: content, to: url)
+        currentDocumentURL = url
+        window?.representedURL = url
+        window?.title = url.lastPathComponent
+        return ["name": .string(url.lastPathComponent)]
+    }
+
+    func closeFromFrontend() {
+        allowWindowClose = true
+        window?.close()
+    }
+
+    func invokeFrontendCommand(_ commandID: String) {
+        guard let encoded = try? JSONEncoder().encode(commandID),
+              let json = String(data: encoded, encoding: .utf8) else {
+            return
+        }
+
+        webView.evaluateJavaScript(
+            "window.InkwellInvokeCommand && window.InkwellInvokeCommand(\(json));",
+            completionHandler: nil
+        )
+    }
+
+    func loadFrontendIfNeeded() {
+        guard !frontendLoadStarted else {
+            return
+        }
+        frontendLoadStarted = true
+
+        do {
+            let frontendDir = try frontendDirectoryURL()
+            let html = try bundledFrontendHTML(in: frontendDir)
+            webView.loadHTMLString(html, baseURL: nil)
+            scheduleTimedDiagnostics()
+        } catch {
+            showStartupError(error.localizedDescription)
+        }
+    }
+
+    func emitEvent(_ type: String, _ data: [String: JSONValue]) {
+        let event: [String: JSONValue] = [
+            "type": .string(type),
+            "data": .object(data)
+        ]
+
+        guard let encoded = try? JSONEncoder().encode(JSONValue.object(event)),
+              let json = String(data: encoded, encoding: .utf8) else {
+            return
+        }
+
+        webView.evaluateJavaScript(
+            "window.InkwellBridgeEvent && window.InkwellBridgeEvent(\(json));",
+            completionHandler: nil
+        )
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if allowWindowClose || !frontendReady {
+            return true
+        }
+
+        emitEvent("closeRequest", [:])
+        return false
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        (NSApp.delegate as? AppDelegate)?.windowControllerDidClose(self)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        frontendReady = true
+        loadInitialDocument()
+        runDiagnosticsIfNeeded()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        writeDiagnostics([
+            "loadFailed": .string(error.localizedDescription)
+        ])
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        writeDiagnostics([
+            "provisionalLoadFailed": .string(error.localizedDescription)
+        ])
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+
+        if isAllowedFrontendURL(url) || url.absoluteString == "about:blank" {
+            decisionHandler(.allow)
+            return
+        }
+
+        emitEvent("security", [
+            "message": .string("Blocked navigation outside the local app."),
+            "uri": .string(url.absoluteString)
+        ])
+        decisionHandler(.cancel)
+    }
+
+    private func configureWindow() {
+        window?.title = "Inkwell"
+        window?.minSize = NSSize(width: 820, height: 560)
+        window?.center()
+        window?.delegate = self
+    }
+
+    private func configureWebView() {
+        let userContentController = WKUserContentController()
+        userContentController.addUserScript(
+            WKUserScript(
+                source: """
+                window.InkwellDiagnostics = { errors: [] };
+                window.addEventListener('error', function(event) {
+                  window.InkwellDiagnostics.errors.push({
+                    message: String(event.message || ''),
+                    source: String(event.filename || ''),
+                    line: Number(event.lineno || 0),
+                    column: Number(event.colno || 0)
+                  });
+                });
+                window.addEventListener('unhandledrejection', function(event) {
+                  window.InkwellDiagnostics.errors.push({
+                    message: String(event.reason && event.reason.message ? event.reason.message : event.reason || ''),
+                    source: 'unhandledrejection',
+                    line: 0,
+                    column: 0
+                  });
+                });
+                """,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        userContentController.add(bridge, name: "inkwell")
+
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.userContentController = userContentController
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+
+        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = self
+        webView.autoresizingMask = [.width, .height]
+        webView.allowsBackForwardNavigationGestures = false
+        webView.allowsLinkPreview = false
+        window?.contentView = webView
+        webView.frame = window?.contentView?.bounds ?? .zero
+        bridge.attach(webView: webView, windowController: self)
+
+        window?.contentView?.needsLayout = true
+    }
+
+    private func loadInitialDocument() {
+        guard let url = initialDocumentURL else {
+            return
+        }
+
+        initialDocumentURL = nil
+        do {
+            let result = try openDocument(at: url)
+            emitEvent("documentLoaded", result)
+        } catch {
+            emitEvent("security", [
+                "message": .string("Could not open \(url.lastPathComponent): \(error.localizedDescription)"),
+                "uri": .string(url.path)
+            ])
+        }
+    }
+
+    private func runDiagnosticsIfNeeded() {
+        guard diagnosticsURL != nil else {
+            return
+        }
+
+        let script = """
+        (function() {
+          const shell = document.querySelector('.app-shell');
+          const editor = document.getElementById('editor');
+          const bodyStyle = window.getComputedStyle(document.body);
+          const shellStyle = shell ? window.getComputedStyle(shell) : null;
+          const rect = shell ? shell.getBoundingClientRect() : null;
+          return JSON.stringify({
+            location: String(window.location.href),
+            readyState: String(document.readyState),
+            title: String(document.title),
+            bodyChildCount: document.body ? document.body.children.length : -1,
+            bodyTextLength: document.body ? (document.body.innerText || '').length : -1,
+            bodyBackground: bodyStyle ? String(bodyStyle.backgroundColor) : '',
+            shellExists: Boolean(shell),
+            shellDisplay: shellStyle ? String(shellStyle.display) : '',
+            shellWidth: rect ? rect.width : 0,
+            shellHeight: rect ? rect.height : 0,
+            editorExists: Boolean(editor),
+            editorEditable: editor ? String(editor.getAttribute('contenteditable')) : '',
+            bodyTheme: String(document.body.dataset.theme || ''),
+            markdownExists: Boolean(window.InkwellMarkdown),
+            invokeCommandExists: typeof window.InkwellInvokeCommand === 'function',
+            bridgeResponseExists: typeof window.InkwellBridgeResponse === 'function',
+            saveMenuShortcut: (document.querySelector('[data-command="save"] .menu-shortcut') || {}).textContent || '',
+            diagnosticErrors: window.InkwellDiagnostics ? window.InkwellDiagnostics.errors : []
+          });
+        })();
+        """
+
+        webView.evaluateJavaScript(script) { [weak self] result, error in
+            guard let self else { return }
+            if let error {
+                self.writeDiagnostics(self.nativeDiagnostics(extra: [
+                    "diagnosticsFailed": .string(error.localizedDescription)
+                ]))
+            } else if let result = result as? String,
+                      let data = result.data(using: .utf8),
+                      let decoded = try? JSONDecoder().decode(JSONValue.self, from: data),
+                      let object = decoded.objectValue {
+                self.writeDiagnostics(self.nativeDiagnostics(extra: object))
+            } else {
+                self.writeDiagnostics(self.nativeDiagnostics(extra: [
+                    "diagnosticsFailed": .string("Unexpected diagnostics result.")
+                ]))
+            }
+        }
+    }
+
+    private func scheduleTimedDiagnostics() {
+        guard diagnosticsURL != nil else {
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self, self.diagnosticsURL != nil else {
+                return
+            }
+            self.runDiagnosticsIfNeeded()
+        }
+    }
+
+    private func nativeDiagnostics(extra: [String: JSONValue]) -> [String: JSONValue] {
+        var data = extra
+        let windowFrame = window?.frame ?? .zero
+        let webViewFrame = webView?.frame ?? .zero
+        data["nativeWindowWidth"] = .number(windowFrame.width)
+        data["nativeWindowHeight"] = .number(windowFrame.height)
+        data["nativeWebViewWidth"] = .number(webViewFrame.width)
+        data["nativeWebViewHeight"] = .number(webViewFrame.height)
+        data["nativeWebViewIsLoading"] = .bool(webView?.isLoading ?? false)
+        data["nativeWebViewURL"] = .string(webView?.url?.absoluteString ?? "")
+        return data
+    }
+
+    private func writeDiagnostics(_ data: [String: JSONValue]) {
+        guard let diagnosticsURL else {
+            return
+        }
+
+        do {
+            let encoded = try JSONEncoder().encode(JSONValue.object(data))
+            if let json = String(data: encoded, encoding: .utf8) {
+                fputs(json + "\n", stdout)
+                fflush(stdout)
+            }
+            try encoded.write(to: diagnosticsURL)
+        } catch {
+            fputs("Inkwell diagnostics failed: \(error.localizedDescription)\n", stderr)
+        }
+
+        self.diagnosticsURL = nil
+        DispatchQueue.main.async {
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func chooseSaveURL(suggestedName: String) throws -> URL {
+        let panel = NSSavePanel()
+        panel.title = "Save Markdown"
+        panel.nameFieldStringValue = suggestedName
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "md") ?? .plainText,
+            .plainText
+        ]
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            throw InkwellError.cancelled
+        }
+
+        return url
+    }
+
+    private func frontendDirectoryURL() throws -> URL {
+        guard let resourceURL = Bundle.main.resourceURL else {
+            throw InkwellError.invalidPayload("Missing app resources.")
+        }
+
+        let frontendDir = resourceURL.appendingPathComponent("frontend", isDirectory: true)
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: frontendDir.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            return frontendDir
+        }
+
+        throw InkwellError.invalidPayload("Missing frontend resources.")
+    }
+
+    private func bundledFrontendHTML(in frontendDir: URL) throws -> String {
+        let indexURL = frontendDir.appendingPathComponent("index.html")
+        let stylesURL = frontendDir.appendingPathComponent("styles.css")
+        let markdownURL = frontendDir.appendingPathComponent("markdown.js")
+        let appURL = frontendDir.appendingPathComponent("app.js")
+
+        var html = try String(contentsOf: indexURL, encoding: .utf8)
+        let styles = try String(contentsOf: stylesURL, encoding: .utf8)
+        let markdownScript = try String(contentsOf: markdownURL, encoding: .utf8)
+        let appScript = try String(contentsOf: appURL, encoding: .utf8)
+        let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        let csp = [
+            "default-src 'none'",
+            "script-src 'nonce-\(nonce)'",
+            "style-src 'nonce-\(nonce)'",
+            "img-src 'none'",
+            "connect-src 'none'",
+            "font-src 'self'",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "form-action 'none'",
+            "frame-ancestors 'none'"
+        ].joined(separator: "; ")
+
+        html = html.replacingOccurrences(
+            of: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'none'; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            with: csp
+        )
+        html = html.replacingOccurrences(
+            of: #"<link rel="stylesheet" href="./styles.css">"#,
+            with: "<style nonce=\"\(nonce)\">\n\(styles)\n</style>"
+        )
+        html = html.replacingOccurrences(
+            of: #"<script src="./markdown.js" defer></script>"#,
+            with: ""
+        )
+        html = html.replacingOccurrences(
+            of: #"<script src="./app.js" defer></script>"#,
+            with: ""
+        )
+        html = html.replacingOccurrences(
+            of: "</body>",
+            with: """
+                <script nonce="\(nonce)">
+                \(escapeInlineScript(markdownScript))
+                </script>
+                <script nonce="\(nonce)">
+                \(escapeInlineScript(appScript))
+                </script>
+              </body>
+            """
+        )
+
+        return html
+    }
+
+    private func escapeInlineScript(_ script: String) -> String {
+        script.replacingOccurrences(of: "</script", with: "<\\/script")
+    }
+
+    private func isAllowedFrontendURL(_ url: URL) -> Bool {
+        guard url.isFileURL, let frontendDir = try? frontendDirectoryURL() else {
+            return false
+        }
+
+        let frontendPath = frontendDir.resolvingSymlinksInPath().standardizedFileURL.path
+        let requestedPath = url.resolvingSymlinksInPath().standardizedFileURL.path
+        return requestedPath == frontendPath || requestedPath.hasPrefix(frontendPath + "/")
+    }
+
+    private func showStartupError(_ message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Inkwell could not start"
+        alert.informativeText = message
+        alert.addButton(withTitle: "Close")
+        alert.runModal()
+        NSApp.terminate(nil)
+    }
+}
