@@ -71,6 +71,51 @@ if (diagnostics.nativeWebViewWidth <= 0 || diagnostics.nativeWebViewHeight <= 0)
 if (diagnostics.saveMenuShortcut !== "Command+S") {
   throw new Error(`Expected macOS Save menu shortcut to be Command+S, got ${diagnostics.saveMenuShortcut}`);
 }
+const editItems = new Map((diagnostics.nativeEditMenuItems || []).map((item) => [item.title, item]));
+for (const [title, expected] of [
+  ["Cut", { action: "cut:", keyEquivalent: "x", targeted: false }],
+  ["Copy", { action: "copy:", keyEquivalent: "c", targeted: false }],
+  ["Paste", { action: "paste:", keyEquivalent: "v", targeted: false }],
+]) {
+  const item = editItems.get(title);
+  if (!item) {
+    throw new Error(`Expected native Edit menu to include ${title}`);
+  }
+  for (const [key, value] of Object.entries(expected)) {
+    if (item[key] !== value) {
+      throw new Error(`Expected ${title} ${key} to be ${value}, got ${item[key]}`);
+    }
+  }
+}
+const nativeMenuItems = new Map((diagnostics.nativeMenuItems || []).map((item) => [`${item.menu}/${item.title}`, item]));
+for (const [path, expected] of [
+  ["Edit/Find Next", { action: "frontendCommandFromMenu:", keyEquivalent: "g", modifiers: ["command"] }],
+  ["Edit/Find Previous", { action: "frontendCommandFromMenu:", keyEquivalent: "g", modifiers: ["command", "shift"] }],
+  ["View/Fit Width", { action: "frontendCommandFromMenu:", keyEquivalent: "w", modifiers: ["command", "option"] }],
+  ["Format/Bold", { action: "frontendCommandFromMenu:", keyEquivalent: "b", modifiers: ["command"] }],
+  ["Format/Inline Code", { action: "frontendCommandFromMenu:", keyEquivalent: "`", modifiers: ["command", "option"] }],
+  ["Format/Bulleted List", { action: "frontendCommandFromMenu:", keyEquivalent: "b", modifiers: ["command", "option"] }],
+  ["Format/Code Block", { action: "frontendCommandFromMenu:", keyEquivalent: "c", modifiers: ["command", "option"] }],
+  ["Inkwell/Keyboard Shortcuts...", { action: "frontendCommandFromMenu:", keyEquivalent: ",", modifiers: ["command"] }],
+  ["Inkwell/Hide Inkwell", { action: "hide:", keyEquivalent: "h", modifiers: ["command"] }],
+  ["Inkwell/Hide Others", { action: "hideOtherApplications:", keyEquivalent: "h", modifiers: ["command", "option"] }],
+  ["Window/Minimize", { action: "performMiniaturize:", keyEquivalent: "m", modifiers: ["command"] }],
+]) {
+  const item = nativeMenuItems.get(path);
+  if (!item) {
+    throw new Error(`Expected native menu item ${path}`);
+  }
+  if (item.action !== expected.action) {
+    throw new Error(`Expected ${path} action ${expected.action}, got ${item.action}`);
+  }
+  if (item.keyEquivalent !== expected.keyEquivalent) {
+    throw new Error(`Expected ${path} keyEquivalent ${expected.keyEquivalent}, got ${item.keyEquivalent}`);
+  }
+  const modifiers = JSON.stringify(item.modifiers || []);
+  if (modifiers !== JSON.stringify(expected.modifiers)) {
+    throw new Error(`Expected ${path} modifiers ${expected.modifiers.join("+")}, got ${modifiers}`);
+  }
+}
 if (!["dark", "light"].includes(diagnostics.bodyTheme)) {
   throw new Error(`Expected body theme to follow a system theme, got ${diagnostics.bodyTheme}`);
 }

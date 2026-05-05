@@ -651,7 +651,7 @@
   function createDefaultShortcutMap() {
     const shortcuts = new Map();
     for (const command of editableShortcutCommands) {
-      shortcuts.set(command.id, normalizeDefaultShortcutText(command.shortcut));
+      shortcuts.set(command.id, normalizeDefaultShortcutText(command));
     }
     return shortcuts;
   }
@@ -698,7 +698,7 @@
       modifierMatch &&
       Boolean(event.shiftKey) === shortcut.shift &&
       Boolean(event.altKey) === shortcut.alt &&
-      shortcutKeysMatch(shortcut.key, normalizeEventKey(event.key))
+      shortcutKeysMatch(shortcut.key, normalizeEventKey(event))
     );
   }
 
@@ -706,7 +706,20 @@
     return shortcutKey === eventKey || (shortcutKey === "=" && eventKey === "+");
   }
 
-  function normalizeEventKey(key) {
+  function normalizeEventKey(event) {
+    const key = event && typeof event === "object" ? event.key : event;
+    if (isMacPlatform && event && event.metaKey && event.altKey) {
+      const code = String(event.code || "");
+      if (/^Key[A-Z]$/.test(code)) {
+        return code.slice(3).toLowerCase();
+      }
+      if (/^Digit\d$/.test(code)) {
+        return code.slice(5);
+      }
+      if (code === "Backquote") {
+        return "Backtick";
+      }
+    }
     return normalizeKeyToken(key);
   }
 
@@ -715,7 +728,11 @@
     return parsed ? shortcutToText(parsed) : "None";
   }
 
-  function normalizeDefaultShortcutText(text) {
+  function normalizeDefaultShortcutText(command) {
+    if (isMacPlatform && command.id === "inlineCode") {
+      return "Command+Option+Backtick";
+    }
+    const text = command.shortcut;
     const parsed = parseShortcutText(text);
     if (!parsed) {
       return "None";
@@ -988,7 +1005,15 @@
   function normalizeShortcutMap(shortcuts) {
     const normalized = new Map();
     for (const command of editableShortcutCommands) {
-      normalized.set(command.id, normalizeShortcutText(shortcuts.get(command.id) || "None"));
+      normalized.set(command.id, normalizeStoredShortcutText(command, shortcuts.get(command.id) || "None"));
+    }
+    return normalized;
+  }
+
+  function normalizeStoredShortcutText(command, text) {
+    const normalized = normalizeShortcutText(text);
+    if (isMacPlatform && command.id === "inlineCode" && normalized === "Command+Backtick") {
+      return "Command+Option+Backtick";
     }
     return normalized;
   }
@@ -3061,7 +3086,7 @@
     hideTableContextMenu();
     editor.focus();
     if (!document.execCommand("paste", false)) {
-      setStatus("Press Ctrl+V to paste into selected cells");
+      setStatus("Press " + primaryShortcutText("V") + " to paste into selected cells");
     }
   }
 
@@ -3674,6 +3699,10 @@
     documentSettings.themeOverride = theme;
     applyTheme(theme);
     setStatus(theme === "light" ? "Light theme" : "Dark theme");
+  }
+
+  function primaryShortcutText(key) {
+    return (isMacPlatform ? "Command+" : "Ctrl+") + key;
   }
 
   function applyTheme(theme) {

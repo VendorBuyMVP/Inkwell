@@ -35,13 +35,13 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.7.0/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.7.1/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
-    <release version="0.7.0" date="2026-05-03">
+    <release version="0.7.1" date="2026-05-05">
       <description>
-        <p>Adds an experimental local macOS build using a native AppKit and WKWebView shell, Mac-style Command keyboard shortcuts, and system appearance matching while preserving the Linux GTK/WebKitGTK app path.</p>
+        <p>Fixes macOS keyboard handling by adding native AppKit menu routes for standard edit commands, advertised editor shortcuts, formatting shortcuts, and common app/window shortcuts.</p>
       </description>
     </release>
     <release version="0.6.0" date="2026-04-30">

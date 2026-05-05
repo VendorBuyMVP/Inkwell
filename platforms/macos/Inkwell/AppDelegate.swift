@@ -142,17 +142,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         focusedWindowController?.invokeFrontendCommand("selectAll")
     }
 
+    @objc private func frontendCommandFromMenu(_ sender: NSMenuItem) {
+        guard let commandID = sender.representedObject as? String else {
+            return
+        }
+        focusedWindowController?.invokeFrontendCommand(commandID)
+    }
+
     private func configureMainMenu() {
         let mainMenu = NSMenu()
         NSApp.mainMenu = mainMenu
 
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
-        let appMenu = NSMenu()
+        let appMenu = NSMenu(title: "Inkwell")
         appMenuItem.submenu = appMenu
         appMenu.addItem(
             withTitle: "About Inkwell",
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            keyEquivalent: ""
+        )
+        appMenu.addItem(.separator())
+        addFrontendCommandItem(
+            to: appMenu,
+            withTitle: "Keyboard Shortcuts...",
+            commandID: "keyboardShortcuts",
+            keyEquivalent: ","
+        )
+        appMenu.addItem(.separator())
+        let servicesMenu = NSMenu(title: "Services")
+        let servicesItem = appMenu.addItem(withTitle: "Services", action: nil, keyEquivalent: "")
+        servicesItem.submenu = servicesMenu
+        NSApp.servicesMenu = servicesMenu
+        appMenu.addItem(.separator())
+        appMenu.addItem(
+            withTitle: "Hide Inkwell",
+            action: #selector(NSApplication.hide(_:)),
+            keyEquivalent: "h"
+        )
+        let hideOthersItem = appMenu.addItem(
+            withTitle: "Hide Others",
+            action: #selector(NSApplication.hideOtherApplications(_:)),
+            keyEquivalent: "h"
+        )
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(
+            withTitle: "Show All",
+            action: #selector(NSApplication.unhideAllApplications(_:)),
             keyEquivalent: ""
         )
         appMenu.addItem(.separator())
@@ -225,11 +261,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         redoItem.keyEquivalentModifierMask = [.command, .shift]
         editMenu.addItem(.separator())
+        addResponderItem(
+            to: editMenu,
+            withTitle: "Cut",
+            action: #selector(NSText.cut(_:)),
+            keyEquivalent: "x"
+        )
+        addResponderItem(
+            to: editMenu,
+            withTitle: "Copy",
+            action: #selector(NSText.copy(_:)),
+            keyEquivalent: "c"
+        )
+        addResponderItem(
+            to: editMenu,
+            withTitle: "Paste",
+            action: #selector(NSText.paste(_:)),
+            keyEquivalent: "v"
+        )
+        editMenu.addItem(.separator())
         addTargetedItem(
             to: editMenu,
             withTitle: "Find",
             action: #selector(findFromMenu(_:)),
             keyEquivalent: "f"
+        )
+        addFrontendCommandItem(
+            to: editMenu,
+            withTitle: "Find Next",
+            commandID: "findNext",
+            keyEquivalent: "g"
+        )
+        addFrontendCommandItem(
+            to: editMenu,
+            withTitle: "Find Previous",
+            commandID: "findPrevious",
+            keyEquivalent: "g",
+            modifiers: [.command, .shift]
         )
         editMenu.addItem(.separator())
         addTargetedItem(
@@ -238,6 +306,172 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(selectAllFromMenu(_:)),
             keyEquivalent: "a"
         )
+
+        let viewMenuItem = NSMenuItem()
+        mainMenu.addItem(viewMenuItem)
+        let viewMenu = NSMenu(title: "View")
+        viewMenuItem.submenu = viewMenu
+        addFrontendCommandItem(
+            to: viewMenu,
+            withTitle: "Zoom In",
+            commandID: "zoomIn",
+            keyEquivalent: "="
+        )
+        addFrontendCommandItem(
+            to: viewMenu,
+            withTitle: "Zoom Out",
+            commandID: "zoomOut",
+            keyEquivalent: "-"
+        )
+        addFrontendCommandItem(
+            to: viewMenu,
+            withTitle: "Actual Size",
+            commandID: "resetZoom",
+            keyEquivalent: "0"
+        )
+        addFrontendCommandItem(
+            to: viewMenu,
+            withTitle: "Fit Width",
+            commandID: "fitWidth",
+            keyEquivalent: "w",
+            modifiers: [.command, .option]
+        )
+
+        let formatMenuItem = NSMenuItem()
+        mainMenu.addItem(formatMenuItem)
+        let formatMenu = NSMenu(title: "Format")
+        formatMenuItem.submenu = formatMenu
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Bold",
+            commandID: "bold",
+            keyEquivalent: "b"
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Italic",
+            commandID: "italic",
+            keyEquivalent: "i"
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Strikethrough",
+            commandID: "strikethrough",
+            keyEquivalent: "x",
+            modifiers: [.command, .shift]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Inline Code",
+            commandID: "inlineCode",
+            keyEquivalent: "`",
+            modifiers: [.command, .option]
+        )
+        formatMenu.addItem(.separator())
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Normal Text",
+            commandID: "paragraph",
+            keyEquivalent: "p",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Heading 1",
+            commandID: "heading1",
+            keyEquivalent: "1",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Heading 2",
+            commandID: "heading2",
+            keyEquivalent: "2",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Heading 3",
+            commandID: "heading3",
+            keyEquivalent: "3",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Block Quote",
+            commandID: "blockquote",
+            keyEquivalent: "q",
+            modifiers: [.command, .option]
+        )
+        formatMenu.addItem(.separator())
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Bulleted List",
+            commandID: "bulletList",
+            keyEquivalent: "b",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Numbered List",
+            commandID: "numberedList",
+            keyEquivalent: "n",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Task List",
+            commandID: "taskList",
+            keyEquivalent: "k",
+            modifiers: [.command, .option]
+        )
+        formatMenu.addItem(.separator())
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Code Block",
+            commandID: "codeBlock",
+            keyEquivalent: "c",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Table",
+            commandID: "table",
+            keyEquivalent: "t",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Horizontal Rule",
+            commandID: "horizontalRule",
+            keyEquivalent: "r",
+            modifiers: [.command, .option]
+        )
+
+        let windowMenuItem = NSMenuItem()
+        mainMenu.addItem(windowMenuItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowMenuItem.submenu = windowMenu
+        NSApp.windowsMenu = windowMenu
+        addResponderItem(
+            to: windowMenu,
+            withTitle: "Minimize",
+            action: #selector(NSWindow.performMiniaturize(_:)),
+            keyEquivalent: "m"
+        )
+        addResponderItem(
+            to: windowMenu,
+            withTitle: "Zoom",
+            action: #selector(NSWindow.performZoom(_:)),
+            keyEquivalent: ""
+        )
+        windowMenu.addItem(.separator())
+        let bringAllToFrontItem = windowMenu.addItem(
+            withTitle: "Bring All to Front",
+            action: #selector(NSApplication.arrangeInFront(_:)),
+            keyEquivalent: ""
+        )
+        bringAllToFrontItem.target = NSApp
     }
 
     @discardableResult
@@ -249,6 +483,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> NSMenuItem {
         let item = menu.addItem(withTitle: title, action: action, keyEquivalent: keyEquivalent)
         item.target = self
+        return item
+    }
+
+    @discardableResult
+    private func addResponderItem(
+        to menu: NSMenu,
+        withTitle title: String,
+        action: Selector,
+        keyEquivalent: String
+    ) -> NSMenuItem {
+        let item = menu.addItem(withTitle: title, action: action, keyEquivalent: keyEquivalent)
+        item.target = nil
+        return item
+    }
+
+    @discardableResult
+    private func addFrontendCommandItem(
+        to menu: NSMenu,
+        withTitle title: String,
+        commandID: String,
+        keyEquivalent: String,
+        modifiers: NSEvent.ModifierFlags = [.command]
+    ) -> NSMenuItem {
+        let item = menu.addItem(
+            withTitle: title,
+            action: #selector(frontendCommandFromMenu(_:)),
+            keyEquivalent: keyEquivalent
+        )
+        item.target = self
+        item.representedObject = commandID
+        item.keyEquivalentModifierMask = modifiers
         return item
     }
 }

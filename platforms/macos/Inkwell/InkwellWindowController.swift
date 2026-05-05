@@ -145,6 +145,7 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         frontendReady = true
+        window?.makeFirstResponder(webView)
         loadInitialDocument()
         runDiagnosticsIfNeeded()
     }
@@ -231,6 +232,7 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
         webView.allowsBackForwardNavigationGestures = false
         webView.allowsLinkPreview = false
         window?.contentView = webView
+        window?.initialFirstResponder = webView
         webView.frame = window?.contentView?.bounds ?? .zero
         bridge.attach(webView: webView, windowController: self)
 
@@ -331,7 +333,60 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
         data["nativeWebViewHeight"] = .number(webViewFrame.height)
         data["nativeWebViewIsLoading"] = .bool(webView?.isLoading ?? false)
         data["nativeWebViewURL"] = .string(webView?.url?.absoluteString ?? "")
+        data["nativeEditMenuItems"] = nativeEditMenuItems()
+        data["nativeMenuItems"] = nativeMenuItems()
         return data
+    }
+
+    private func nativeEditMenuItems() -> JSONValue {
+        guard let editMenu = NSApp.mainMenu?.items.compactMap({ $0.submenu }).first(where: { $0.title == "Edit" }) else {
+            return .array([])
+        }
+
+        return .array(editMenu.items.filter { !$0.isSeparatorItem }.map { item in
+            .object([
+                "title": .string(item.title),
+                "action": .string(item.action.map { NSStringFromSelector($0) } ?? ""),
+                "keyEquivalent": .string(item.keyEquivalent),
+                "targeted": .bool(item.target != nil)
+            ])
+        })
+    }
+
+    private func nativeMenuItems() -> JSONValue {
+        guard let mainMenu = NSApp.mainMenu else {
+            return .array([])
+        }
+
+        return .array(mainMenu.items.compactMap { $0.submenu }.flatMap { menu in
+            menu.items.filter { !$0.isSeparatorItem }.map { item in
+                .object([
+                    "menu": .string(menu.title),
+                    "title": .string(item.title),
+                    "action": .string(item.action.map { NSStringFromSelector($0) } ?? ""),
+                    "keyEquivalent": .string(item.keyEquivalent),
+                    "modifiers": .array(modifierNames(item.keyEquivalentModifierMask).map { .string($0) }),
+                    "targeted": .bool(item.target != nil)
+                ])
+            }
+        })
+    }
+
+    private func modifierNames(_ modifiers: NSEvent.ModifierFlags) -> [String] {
+        var names: [String] = []
+        if modifiers.contains(.command) {
+            names.append("command")
+        }
+        if modifiers.contains(.option) {
+            names.append("option")
+        }
+        if modifiers.contains(.shift) {
+            names.append("shift")
+        }
+        if modifiers.contains(.control) {
+            names.append("control")
+        }
+        return names
     }
 
     private func writeDiagnostics(_ data: [String: JSONValue]) {
