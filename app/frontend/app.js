@@ -86,6 +86,22 @@
     "td",
     "th",
   ]);
+  const SERIALIZED_BLOCK_TAGS = new Set([
+    "blockquote",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "ol",
+    "p",
+    "pre",
+    "table",
+    "ul",
+  ]);
 
   const COMMANDS = [
     { id: "new", label: "New", shortcut: "Ctrl+N", run: () => newDocument() },
@@ -2030,6 +2046,9 @@
     }
 
     if (tag === "p" || tag === "div") {
+      if (hasSerializedBlockChildren(node)) {
+        return serializeBlocks(Array.from(node.childNodes));
+      }
       return serializeInline(node).trim();
     }
 
@@ -2096,6 +2115,9 @@
         if (tag === "code") {
           return "`" + node.textContent.replace(/`/g, "\\`") + "`";
         }
+        if (tag === "table") {
+          return "\n\n" + serializeTable(node) + "\n\n";
+        }
         if (tag === "a") {
           const label = serializeInline(node) || node.textContent;
           const href = window.InkwellMarkdown.sanitizeHref(node.getAttribute("href"));
@@ -2111,6 +2133,12 @@
         return serializeInline(node);
       })
       .join("");
+  }
+
+  function hasSerializedBlockChildren(node) {
+    return Array.from(node.childNodes).some(
+      (child) => child.nodeType === Node.ELEMENT_NODE && SERIALIZED_BLOCK_TAGS.has(child.tagName.toLowerCase())
+    );
   }
 
   function serializeTable(table) {

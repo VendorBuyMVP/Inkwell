@@ -35,10 +35,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.7.1/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.7.2/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.7.2" date="2026-05-08">
+      <description>
+        <p>Fixes table undo and Markdown serialization when WebKit wraps table content in block-level containers, preserving table structure instead of flattening cells into plain text.</p>
+      </description>
+    </release>
     <release version="0.7.1" date="2026-05-05">
       <description>
         <p>Fixes macOS keyboard handling by adding native AppKit menu routes for standard edit commands, advertised editor shortcuts, formatting shortcuts, and common app/window shortcuts.</p>
