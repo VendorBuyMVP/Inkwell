@@ -3220,7 +3220,12 @@
       return [];
     }
 
-    if (lines.some((line) => line.includes("|"))) {
+    const nonEmptyLines = lines.filter((line) => line.trim());
+    if (nonEmptyLines.some((line) => line.includes("\t"))) {
+      return lines.map((line) => line.split("\t"));
+    }
+
+    if (nonEmptyLines.length && nonEmptyLines.every((line) => line.includes("|"))) {
       const rows = lines
         .map(splitMarkdownTableRow)
         .filter((row) => row.length && !isMarkdownDelimiterRow(row));
