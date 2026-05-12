@@ -170,11 +170,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ","
         )
         appMenu.addItem(.separator())
-        let servicesMenu = NSMenu(title: "Services")
-        let servicesItem = appMenu.addItem(withTitle: "Services", action: nil, keyEquivalent: "")
-        servicesItem.submenu = servicesMenu
-        NSApp.servicesMenu = servicesMenu
-        appMenu.addItem(.separator())
         appMenu.addItem(
             withTitle: "Hide Inkwell",
             action: #selector(NSApplication.hide(_:)),
@@ -236,6 +231,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         saveAsItem.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(.separator())
+        addFrontendCommandItem(
+            to: fileMenu,
+            withTitle: "Export Markdown...",
+            commandID: "exportMarkdown",
+            keyEquivalent: ""
+        )
+        addFrontendCommandItem(
+            to: fileMenu,
+            withTitle: "Export HTML...",
+            commandID: "exportHTML",
+            keyEquivalent: ""
+        )
+        fileMenu.addItem(.separator())
+        let pageSetupItem = addFrontendCommandItem(
+            to: fileMenu,
+            withTitle: "Page Setup...",
+            commandID: "pageSetup",
+            keyEquivalent: "p"
+        )
+        pageSetupItem.keyEquivalentModifierMask = [.command, .shift]
+        addFrontendCommandItem(
+            to: fileMenu,
+            withTitle: "Print...",
+            commandID: "print",
+            keyEquivalent: "p"
+        )
+        fileMenu.addItem(.separator())
         addTargetedItem(
             to: fileMenu,
             withTitle: "Close Window",
@@ -279,12 +301,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(NSText.paste(_:)),
             keyEquivalent: "v"
         )
+        let pasteMatchItem = addFrontendCommandItem(
+            to: editMenu,
+            withTitle: "Paste and Match Style",
+            commandID: "pastePlainText",
+            keyEquivalent: "v"
+        )
+        pasteMatchItem.keyEquivalentModifierMask = [.command, .shift]
         editMenu.addItem(.separator())
         addTargetedItem(
             to: editMenu,
             withTitle: "Find",
             action: #selector(findFromMenu(_:)),
             keyEquivalent: "f"
+        )
+        addFrontendCommandItem(
+            to: editMenu,
+            withTitle: "Find and Replace",
+            commandID: "findReplace",
+            keyEquivalent: "f",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: editMenu,
+            withTitle: "Use Selection for Find",
+            commandID: "useSelectionForFind",
+            keyEquivalent: "e"
         )
         addFrontendCommandItem(
             to: editMenu,
@@ -305,6 +347,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withTitle: "Select All",
             action: #selector(selectAllFromMenu(_:)),
             keyEquivalent: "a"
+        )
+        editMenu.addItem(.separator())
+        let spellingItem = editMenu.addItem(withTitle: "Spelling and Grammar", action: nil, keyEquivalent: "")
+        let spellingMenu = NSMenu(title: "Spelling and Grammar")
+        spellingItem.submenu = spellingMenu
+        addFrontendCommandItem(
+            to: spellingMenu,
+            withTitle: "Show Spelling and Grammar",
+            commandID: "showSpellingSuggestions",
+            keyEquivalent: ":"
+        )
+        addFrontendCommandItem(
+            to: spellingMenu,
+            withTitle: "Check Document Now",
+            commandID: "checkDocumentSpelling",
+            keyEquivalent: ";"
+        )
+        spellingMenu.addItem(.separator())
+        addFrontendCommandItem(
+            to: spellingMenu,
+            withTitle: "Check Spelling While Typing",
+            commandID: "toggleContinuousSpellcheck",
+            keyEquivalent: ""
+        )
+        addFrontendCommandItem(
+            to: spellingMenu,
+            withTitle: "Check Grammar With Spelling",
+            commandID: "checkDocumentGrammar",
+            keyEquivalent: ""
+        )
+        let substitutionsItem = editMenu.addItem(withTitle: "Substitutions", action: nil, keyEquivalent: "")
+        let substitutionsMenu = NSMenu(title: "Substitutions")
+        substitutionsItem.submenu = substitutionsMenu
+        addResponderItem(
+            to: substitutionsMenu,
+            withTitle: "Smart Copy/Paste",
+            action: #selector(NSTextView.toggleSmartInsertDelete(_:)),
+            keyEquivalent: ""
+        )
+        addResponderItem(
+            to: substitutionsMenu,
+            withTitle: "Smart Quotes",
+            action: #selector(NSTextView.toggleAutomaticQuoteSubstitution(_:)),
+            keyEquivalent: ""
+        )
+        addResponderItem(
+            to: substitutionsMenu,
+            withTitle: "Smart Dashes",
+            action: #selector(NSTextView.toggleAutomaticDashSubstitution(_:)),
+            keyEquivalent: ""
+        )
+        addResponderItem(
+            to: substitutionsMenu,
+            withTitle: "Text Replacement",
+            action: #selector(NSTextView.toggleAutomaticTextReplacement(_:)),
+            keyEquivalent: ""
+        )
+        let speechItem = editMenu.addItem(withTitle: "Speech", action: nil, keyEquivalent: "")
+        let speechMenu = NSMenu(title: "Speech")
+        speechItem.submenu = speechMenu
+        addFrontendCommandItem(
+            to: speechMenu,
+            withTitle: "Start Speaking",
+            commandID: "startSpeaking",
+            keyEquivalent: ""
+        )
+        addFrontendCommandItem(
+            to: speechMenu,
+            withTitle: "Stop Speaking",
+            commandID: "stopSpeaking",
+            keyEquivalent: ""
         )
 
         let viewMenuItem = NSMenuItem()
@@ -335,6 +448,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             commandID: "fitWidth",
             keyEquivalent: "w",
             modifiers: [.command, .option]
+        )
+        viewMenu.addItem(.separator())
+        addFrontendCommandItem(
+            to: viewMenu,
+            withTitle: "Show/Hide Ruler",
+            commandID: "toggleRuler",
+            keyEquivalent: ""
+        )
+        viewMenu.addItem(.separator())
+        addFrontendCommandItem(
+            to: viewMenu,
+            withTitle: "Dark Theme",
+            commandID: "themeDark",
+            keyEquivalent: ""
+        )
+        addFrontendCommandItem(
+            to: viewMenu,
+            withTitle: "Light Theme",
+            commandID: "themeLight",
+            keyEquivalent: ""
+        )
+        viewMenu.addItem(.separator())
+        addFrontendCommandItem(
+            to: viewMenu,
+            withTitle: "Letter Page",
+            commandID: "letterPage",
+            keyEquivalent: ""
+        )
+        addFrontendCommandItem(
+            to: viewMenu,
+            withTitle: "A4 Page",
+            commandID: "a4Page",
+            keyEquivalent: ""
+        )
+        addFrontendCommandItem(
+            to: viewMenu,
+            withTitle: "Reset Margins",
+            commandID: "resetMargins",
+            keyEquivalent: ""
         )
 
         let formatMenuItem = NSMenuItem()
@@ -398,6 +550,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         addFrontendCommandItem(
             to: formatMenu,
+            withTitle: "Heading 4",
+            commandID: "heading4",
+            keyEquivalent: "4",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Heading 5",
+            commandID: "heading5",
+            keyEquivalent: "5",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
+            withTitle: "Heading 6",
+            commandID: "heading6",
+            keyEquivalent: "6",
+            modifiers: [.command, .option]
+        )
+        addFrontendCommandItem(
+            to: formatMenu,
             withTitle: "Block Quote",
             commandID: "blockquote",
             keyEquivalent: "q",
@@ -433,20 +606,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "c",
             modifiers: [.command, .option]
         )
+
+        let insertMenuItem = NSMenuItem()
+        mainMenu.addItem(insertMenuItem)
+        let insertMenu = NSMenu(title: "Insert")
+        insertMenuItem.submenu = insertMenu
         addFrontendCommandItem(
-            to: formatMenu,
+            to: insertMenu,
             withTitle: "Table",
             commandID: "table",
             keyEquivalent: "t",
             modifiers: [.command, .option]
         )
         addFrontendCommandItem(
-            to: formatMenu,
+            to: insertMenu,
             withTitle: "Horizontal Rule",
             commandID: "horizontalRule",
             keyEquivalent: "r",
             modifiers: [.command, .option]
         )
+
+        let tableMenuItem = NSMenuItem()
+        mainMenu.addItem(tableMenuItem)
+        let tableMenu = NSMenu(title: "Table")
+        tableMenuItem.submenu = tableMenu
+        addFrontendCommandItem(to: tableMenu, withTitle: "Insert Row Above", commandID: "tableInsertRowAbove", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Insert Row Below", commandID: "tableInsertRowBelow", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Delete Row", commandID: "tableDeleteRows", keyEquivalent: "")
+        tableMenu.addItem(.separator())
+        addFrontendCommandItem(to: tableMenu, withTitle: "Insert Column Left", commandID: "tableInsertColumnLeft", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Insert Column Right", commandID: "tableInsertColumnRight", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Delete Column", commandID: "tableDeleteColumns", keyEquivalent: "")
+        tableMenu.addItem(.separator())
+        addFrontendCommandItem(to: tableMenu, withTitle: "Align Column Left", commandID: "tableAlignColumnLeft", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Align Column Center", commandID: "tableAlignColumnCenter", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Align Column Right", commandID: "tableAlignColumnRight", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Clear Column Alignment", commandID: "tableAlignColumnDefault", keyEquivalent: "")
+        tableMenu.addItem(.separator())
+        addFrontendCommandItem(to: tableMenu, withTitle: "Clear Selected Cells", commandID: "tableClearCells", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Clear Row", commandID: "tableClearRows", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Clear Column", commandID: "tableClearColumns", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Normalize Table", commandID: "tableNormalize", keyEquivalent: "")
+        addFrontendCommandItem(to: tableMenu, withTitle: "Delete Table", commandID: "tableDelete", keyEquivalent: "")
 
         let windowMenuItem = NSMenuItem()
         mainMenu.addItem(windowMenuItem)

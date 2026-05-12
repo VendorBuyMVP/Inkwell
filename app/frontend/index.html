@@ -27,6 +27,12 @@
                 <span class="menu-separator" aria-hidden="true"></span>
                 <button class="menu-item" type="button" role="menuitem" data-command="save">Save</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="saveAs">Save As</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="exportMarkdown">Export Markdown</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="exportHTML">Export HTML</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="pageSetup">Page Setup</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="print">Print</button>
               </div>
             </div>
 
@@ -36,11 +42,18 @@
                 <button class="menu-item" type="button" role="menuitem" data-command="undo">Undo</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="redo">Redo</button>
                 <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="pastePlainText">Paste as Plain Text</button>
+                <span class="menu-separator" aria-hidden="true"></span>
                 <button class="menu-item" type="button" role="menuitem" data-command="find">Find</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="findReplace">Find and Replace</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="useSelectionForFind">Use Selection for Find</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="findNext">Find Next</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="findPrevious">Find Previous</button>
                 <span class="menu-separator" aria-hidden="true"></span>
                 <button class="menu-item" type="button" role="menuitem" data-command="selectAll">Select All</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="startSpeaking">Start Speaking</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="stopSpeaking">Stop Speaking</button>
               </div>
             </div>
 
@@ -53,6 +66,13 @@
                 <button class="menu-item" type="button" role="menuitem" data-command="fitWidth">Fit Width</button>
                 <span class="menu-separator" aria-hidden="true"></span>
                 <button class="menu-item" type="button" role="menuitem" data-command="toggleRuler">Hide Ruler</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="themeDark">Dark Theme</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="themeLight">Light Theme</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="letterPage">Letter Page</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="a4Page">A4 Page</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="resetMargins">Reset Margins</button>
               </div>
             </div>
 
@@ -68,6 +88,9 @@
                 <button class="menu-item" type="button" role="menuitem" data-command="heading1">Heading 1</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="heading2">Heading 2</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="heading3">Heading 3</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="heading4">Heading 4</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="heading5">Heading 5</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="heading6">Heading 6</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="blockquote">Block Quote</button>
                 <span class="menu-separator" aria-hidden="true"></span>
                 <button class="menu-item" type="button" role="menuitem" data-command="bulletList">Bulleted List</button>
@@ -75,22 +98,38 @@
                 <button class="menu-item" type="button" role="menuitem" data-command="taskList">Task List</button>
                 <span class="menu-separator" aria-hidden="true"></span>
                 <button class="menu-item" type="button" role="menuitem" data-command="codeBlock">Code Block</button>
+              </div>
+            </div>
+
+            <div class="menu" data-menu-root>
+              <button class="menu-title" type="button" aria-haspopup="menu" aria-expanded="false">Insert</button>
+              <div class="menu-panel" role="menu" hidden>
                 <button class="menu-item" type="button" role="menuitem" data-command="table">Table</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="horizontalRule">Horizontal Rule</button>
               </div>
             </div>
 
             <div class="menu" data-menu-root>
-              <button class="menu-title" type="button" aria-haspopup="menu" aria-expanded="false">Settings</button>
+              <button class="menu-title" type="button" aria-haspopup="menu" aria-expanded="false">Table</button>
               <div class="menu-panel" role="menu" hidden>
-                <button class="menu-item" type="button" role="menuitem" data-command="themeDark">Dark Theme</button>
-                <button class="menu-item" type="button" role="menuitem" data-command="themeLight">Light Theme</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableInsertRowAbove">Insert Row Above</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableInsertRowBelow">Insert Row Below</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableDeleteRows">Delete Row</button>
                 <span class="menu-separator" aria-hidden="true"></span>
-                <button class="menu-item" type="button" role="menuitem" data-command="letterPage">Letter Page</button>
-                <button class="menu-item" type="button" role="menuitem" data-command="a4Page">A4 Page</button>
-                <button class="menu-item" type="button" role="menuitem" data-command="resetMargins">Reset Margins</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableInsertColumnLeft">Insert Column Left</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableInsertColumnRight">Insert Column Right</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableDeleteColumns">Delete Column</button>
                 <span class="menu-separator" aria-hidden="true"></span>
-                <button class="menu-item" type="button" role="menuitem" data-command="keyboardShortcuts">Keyboard Shortcuts</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableAlignColumnLeft">Align Column Left</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableAlignColumnCenter">Align Column Center</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableAlignColumnRight">Align Column Right</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableAlignColumnDefault">Clear Column Alignment</button>
+                <span class="menu-separator" aria-hidden="true"></span>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableClearCells">Clear Selected Cells</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableClearRows">Clear Row</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableClearColumns">Clear Column</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="tableNormalize">Normalize Table</button>
+                <button class="menu-item danger" type="button" role="menuitem" data-command="tableDelete">Delete Table</button>
               </div>
             </div>
           </nav>
@@ -99,7 +138,6 @@
         <div class="file-state">
           <span class="file-name" id="fileName">Untitled.md</span>
           <span class="dirty-state" id="dirtyState">Saved</span>
-          <span class="zoom-state" id="zoomState">100%</span>
         </div>
       </header>
 
@@ -113,7 +151,18 @@
           spellcheck="false"
           aria-label="Find text"
         >
+        <label class="findbar-label replace-label" for="replaceInput">Replace</label>
+        <input
+          id="replaceInput"
+          class="find-input replace-input"
+          type="search"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Replace text"
+        >
         <span class="find-count" id="findCount" aria-live="polite">0 / 0</span>
+        <button class="find-button replace-button" id="replaceButton" type="button" aria-label="Replace current match" title="Replace">R</button>
+        <button class="find-button replace-button wide" id="replaceAllButton" type="button" aria-label="Replace all matches" title="Replace all">All</button>
         <button class="find-button" id="findPreviousButton" type="button" aria-label="Previous match" title="Previous match">&uarr;</button>
         <button class="find-button" id="findNextButton" type="button" aria-label="Next match" title="Next match">&darr;</button>
         <button class="find-button" id="findCloseButton" type="button" aria-label="Close find" title="Close find">&times;</button>
@@ -144,7 +193,10 @@
       </main>
 
       <footer class="statusbar">
-        <span id="statusText">Ready</span>
+        <span class="status-primary">
+          <span id="statusText">Ready</span>
+          <span class="zoom-state" id="zoomState" hidden>Zoom 100%</span>
+        </span>
         <span id="documentStats">0 words</span>
       </footer>
     </div>
@@ -152,6 +204,8 @@
     <input id="fileInput" class="hidden-file-input" type="file" accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain">
 
     <div class="find-overlay" id="findOverlay" aria-hidden="true"></div>
+
+    <div class="spelling-context-menu" id="spellingContextMenu" role="menu" aria-label="Spelling suggestions" hidden></div>
 
     <div class="selection-toolbar" id="selectionToolbar" role="toolbar" aria-label="Markdown formatting" hidden>
       <button class="tool-button strong" type="button" data-toolbar-action="bold" aria-label="Bold" title="Bold">B</button>

@@ -87,6 +87,14 @@ body.ruler-hidden .app-shell {
   grid-template-rows: 28px minmax(0, 1fr) 26px;
 }
 
+body.native-shell .app-shell {
+  grid-template-rows: 24px minmax(0, 1fr) 26px;
+}
+
+body.native-shell.ruler-hidden .app-shell {
+  grid-template-rows: minmax(0, 1fr) 26px;
+}
+
 .topbar {
   position: relative;
   z-index: 4;
@@ -98,6 +106,10 @@ body.ruler-hidden .app-shell {
   border-bottom: 1px solid var(--border);
   background: var(--chrome-bg);
   padding: 0 12px;
+}
+
+body.native-shell .topbar {
+  display: none;
 }
 
 .topbar-left {
@@ -119,6 +131,10 @@ body.ruler-hidden .app-shell {
   align-items: stretch;
   gap: 2px;
   height: 100%;
+}
+
+body.native-shell .menubar {
+  display: none;
 }
 
 .menu {
@@ -184,6 +200,19 @@ body.ruler-hidden .app-shell {
   background: var(--menu-hover);
 }
 
+.menu-item:disabled {
+  color: var(--page-muted);
+  opacity: 0.48;
+}
+
+.menu-item:disabled:hover {
+  background: transparent;
+}
+
+.menu-item.danger {
+  color: var(--accent);
+}
+
 .menu-item-label {
   min-width: 0;
   overflow: hidden;
@@ -222,8 +251,7 @@ body.ruler-hidden .app-shell {
   white-space: nowrap;
 }
 
-.dirty-state,
-.zoom-state {
+.dirty-state {
   flex: 0 0 auto;
 }
 
@@ -247,6 +275,10 @@ body.ruler-hidden .app-shell {
   background: var(--menu-bg);
   color: var(--page-text);
   box-shadow: var(--shadow);
+}
+
+body.native-shell .findbar {
+  top: 10px;
 }
 
 .findbar[hidden] {
@@ -280,6 +312,12 @@ body.ruler-hidden .app-shell {
   outline-offset: 0;
 }
 
+.findbar:not(.is-replacing) .replace-label,
+.findbar:not(.is-replacing) .replace-input,
+.findbar:not(.is-replacing) .replace-button {
+  display: none;
+}
+
 .find-count {
   flex: 0 0 auto;
   min-width: 56px;
@@ -304,6 +342,11 @@ body.ruler-hidden .app-shell {
   font-size: 13px;
   line-height: 1;
   padding: 0;
+}
+
+.find-button.wide {
+  width: 34px;
+  font-size: 11px;
 }
 
 .find-button:hover,
@@ -635,6 +678,17 @@ body[data-theme="light"] .editor tr:nth-child(even) td {
   white-space: nowrap;
 }
 
+.status-primary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zoom-state {
+  flex: 0 0 auto;
+  color: var(--page-text);
+}
+
 .hidden-file-input {
   display: none;
 }
@@ -745,7 +799,8 @@ body[data-theme="light"] .editor tr:nth-child(even) td {
   background: var(--border);
 }
 
-.table-context-menu {
+.table-context-menu,
+.spelling-context-menu {
   position: fixed;
   z-index: 35;
   width: 238px;
@@ -759,11 +814,17 @@ body[data-theme="light"] .editor tr:nth-child(even) td {
   box-shadow: var(--shadow);
 }
 
-.table-context-menu[hidden] {
+.spelling-context-menu {
+  width: 220px;
+}
+
+.table-context-menu[hidden],
+.spelling-context-menu[hidden] {
   display: none;
 }
 
-.table-menu-item {
+.table-menu-item,
+.spelling-menu-item {
   display: block;
   width: 100%;
   height: 29px;
@@ -778,11 +839,14 @@ body[data-theme="light"] .editor tr:nth-child(even) td {
 }
 
 .table-menu-item:hover,
-.table-menu-item:focus-visible {
+.table-menu-item:focus-visible,
+.spelling-menu-item:hover,
+.spelling-menu-item:focus-visible {
   background: var(--menu-hover);
 }
 
-.table-menu-item:disabled {
+.table-menu-item:disabled,
+.spelling-menu-item:disabled {
   color: var(--page-muted);
   opacity: 0.48;
 }
@@ -933,6 +997,7 @@ body[data-theme="light"] .modal-button.danger {
 .find-button:focus-visible,
 .tool-button:focus-visible,
 .table-menu-item:focus-visible,
+.spelling-menu-item:focus-visible,
 .modal-button:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
@@ -977,5 +1042,39 @@ body[data-theme="light"] .modal-button.danger {
   .shortcut-row {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+}
+
+@media print {
+  .topbar,
+  .findbar,
+  .ruler,
+  .statusbar,
+  .selection-toolbar,
+  .table-context-menu,
+  .spelling-context-menu,
+  .modal-backdrop {
+    display: none !important;
+  }
+
+  .app-shell {
+    display: block;
+    height: auto;
+    min-width: 0;
+    background: #ffffff;
+  }
+
+  .workspace,
+  .document-scroll {
+    display: block;
+    overflow: visible;
+    background: #ffffff;
+  }
+
+  .page {
+    width: auto;
+    min-height: 0;
+    box-shadow: none;
+    border: 0;
   }
 }

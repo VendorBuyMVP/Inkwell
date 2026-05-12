@@ -70,6 +70,13 @@ enum JSONValue: Codable, Equatable {
         }
         return nil
     }
+
+    var numberValue: Double? {
+        if case .number(let value) = self {
+            return value
+        }
+        return nil
+    }
 }
 struct BridgeMessage: Decodable {
     let id: String

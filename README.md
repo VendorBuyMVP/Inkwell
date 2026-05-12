@@ -10,11 +10,14 @@ It stores Markdown files locally and does not require accounts, sync, telemetry,
 
 - Open, save, save as, and new document workflows
 - Multi-window editing
-- Find in document with keyboard navigation
+- Find and replace, Use Selection for Find, and keyboard navigation
 - Dark and light themes, with macOS system appearance support
 - Keyboard shortcuts, including Command-key shortcuts on macOS
 - Markdown formatting for headings, emphasis, lists, quotes, code blocks, tables, task lists, and horizontal rules
 - Basic table editing
+- macOS spelling suggestions, basic grammar checks, and read-aloud controls
+- Print, page setup, Markdown export, and HTML export commands
+- Zoom controls with a status-bar zoom indicator away from 100%
 - Word and character counts
 
 ## Requirements

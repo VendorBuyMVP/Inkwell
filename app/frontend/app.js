@@ -109,12 +109,25 @@
     { id: "open", label: "Open", shortcut: "Ctrl+O", run: () => openFile() },
     { id: "save", label: "Save", shortcut: "Ctrl+S", run: () => saveFile(false) },
     { id: "saveAs", label: "Save As", shortcut: "Ctrl+Shift+S", run: () => saveFile(true) },
+    { id: "exportMarkdown", label: "Export Markdown", run: () => exportMarkdown() },
+    { id: "exportHTML", label: "Export HTML", run: () => exportHTML() },
+    { id: "pageSetup", label: "Page Setup", shortcut: "Ctrl+Shift+P", run: () => pageSetup() },
+    { id: "print", label: "Print", shortcut: "Ctrl+P", run: () => printDocument() },
     { id: "undo", label: "Undo", shortcut: "Ctrl+Z", action: "undo", scope: "editor" },
     { id: "redo", label: "Redo", shortcut: "Ctrl+Shift+Z", action: "redo", scope: "editor" },
+    { id: "pastePlainText", label: "Paste as Plain Text", shortcut: "Ctrl+Shift+V", run: () => pastePlainTextFromCommand() },
     { id: "find", label: "Find", shortcut: "Ctrl+F", run: () => openFindBar() },
+    { id: "findReplace", label: "Find and Replace", shortcut: "Ctrl+Alt+F", run: () => openFindBar({ replace: true }) },
+    { id: "useSelectionForFind", label: "Use Selection for Find", shortcut: "Ctrl+E", run: () => useSelectionForFind() },
     { id: "findNext", label: "Find Next", shortcut: "Ctrl+G", run: () => goToFindMatch(1) },
     { id: "findPrevious", label: "Find Previous", shortcut: "Ctrl+Shift+G", run: () => goToFindMatch(-1) },
     { id: "selectAll", label: "Select All", shortcut: "Ctrl+A", action: "selectAll", scope: "editor" },
+    { id: "showSpellingSuggestions", label: "Show Spelling and Grammar", shortcut: "Ctrl+:", run: () => showSpellingSuggestionsForCurrentWord() },
+    { id: "checkDocumentSpelling", label: "Check Document Now", shortcut: "Ctrl+;", run: () => checkDocumentSpelling() },
+    { id: "toggleContinuousSpellcheck", label: "Check Spelling While Typing", run: () => toggleContinuousSpellcheck() },
+    { id: "checkDocumentGrammar", label: "Check Grammar With Spelling", run: () => checkDocumentGrammar() },
+    { id: "startSpeaking", label: "Start Speaking", run: () => startSpeaking() },
+    { id: "stopSpeaking", label: "Stop Speaking", run: () => stopSpeaking() },
     { id: "zoomIn", label: "Zoom In", shortcut: "Ctrl+=", action: "zoomIn" },
     { id: "zoomOut", label: "Zoom Out", shortcut: "Ctrl+-", action: "zoomOut" },
     { id: "resetZoom", label: "Reset Zoom", shortcut: "Ctrl+0", action: "resetZoom" },
@@ -128,6 +141,9 @@
     { id: "heading1", label: "Heading 1", shortcut: "Ctrl+Alt+1", action: "heading1", scope: "editor" },
     { id: "heading2", label: "Heading 2", shortcut: "Ctrl+Alt+2", action: "heading2", scope: "editor" },
     { id: "heading3", label: "Heading 3", shortcut: "Ctrl+Alt+3", action: "heading3", scope: "editor" },
+    { id: "heading4", label: "Heading 4", shortcut: "Ctrl+Alt+4", action: "heading4", scope: "editor" },
+    { id: "heading5", label: "Heading 5", shortcut: "Ctrl+Alt+5", action: "heading5", scope: "editor" },
+    { id: "heading6", label: "Heading 6", shortcut: "Ctrl+Alt+6", action: "heading6", scope: "editor" },
     { id: "blockquote", label: "Block Quote", shortcut: "Ctrl+Alt+Q", action: "blockquote", scope: "editor" },
     { id: "bulletList", label: "Bulleted List", shortcut: "Ctrl+Alt+B", action: "bulletList", scope: "editor" },
     { id: "numberedList", label: "Numbered List", shortcut: "Ctrl+Alt+N", action: "numberedList", scope: "editor" },
@@ -135,6 +151,21 @@
     { id: "codeBlock", label: "Code Block", shortcut: "Ctrl+Alt+C", action: "codeBlock", scope: "editor" },
     { id: "table", label: "Table", shortcut: "Ctrl+Alt+T", action: "table", scope: "editor" },
     { id: "horizontalRule", label: "Horizontal Rule", shortcut: "Ctrl+Alt+R", action: "horizontalRule", scope: "editor" },
+    { id: "tableInsertRowAbove", label: "Insert Row Above", tableAction: "insertRowAbove", scope: "table" },
+    { id: "tableInsertRowBelow", label: "Insert Row Below", tableAction: "insertRowBelow", scope: "table" },
+    { id: "tableDeleteRows", label: "Delete Row", tableAction: "deleteRows", scope: "table" },
+    { id: "tableInsertColumnLeft", label: "Insert Column Left", tableAction: "insertColumnLeft", scope: "table" },
+    { id: "tableInsertColumnRight", label: "Insert Column Right", tableAction: "insertColumnRight", scope: "table" },
+    { id: "tableDeleteColumns", label: "Delete Column", tableAction: "deleteColumns", scope: "table" },
+    { id: "tableAlignColumnLeft", label: "Align Column Left", tableAction: "alignColumnLeft", scope: "table" },
+    { id: "tableAlignColumnCenter", label: "Align Column Center", tableAction: "alignColumnCenter", scope: "table" },
+    { id: "tableAlignColumnRight", label: "Align Column Right", tableAction: "alignColumnRight", scope: "table" },
+    { id: "tableAlignColumnDefault", label: "Clear Column Alignment", tableAction: "alignColumnDefault", scope: "table" },
+    { id: "tableClearCells", label: "Clear Selected Cells", tableAction: "clearCells", scope: "table" },
+    { id: "tableClearRows", label: "Clear Row", tableAction: "clearRows", scope: "table" },
+    { id: "tableClearColumns", label: "Clear Column", tableAction: "clearColumns", scope: "table" },
+    { id: "tableNormalize", label: "Normalize Table", tableAction: "normalizeTable", scope: "table" },
+    { id: "tableDelete", label: "Delete Table", tableAction: "deleteTable", scope: "table" },
     { id: "themeDark", label: "Dark Theme", action: "themeDark", editable: false },
     { id: "themeLight", label: "Light Theme", action: "themeLight", editable: false },
     { id: "letterPage", label: "Letter Page", action: "letterPage", editable: false },
@@ -209,11 +240,15 @@
   const shortcutSaveButton = document.getElementById("shortcutSaveButton");
   const findBar = document.getElementById("findBar");
   const findInput = document.getElementById("findInput");
+  const replaceInput = document.getElementById("replaceInput");
   const findCount = document.getElementById("findCount");
+  const replaceButton = document.getElementById("replaceButton");
+  const replaceAllButton = document.getElementById("replaceAllButton");
   const findPreviousButton = document.getElementById("findPreviousButton");
   const findNextButton = document.getElementById("findNextButton");
   const findCloseButton = document.getElementById("findCloseButton");
   const findOverlay = document.getElementById("findOverlay");
+  const spellingContextMenu = document.getElementById("spellingContextMenu");
   const selectionToolbar = document.getElementById("selectionToolbar");
   const tableContextMenu = document.getElementById("tableContextMenu");
   const menuRoots = Array.from(document.querySelectorAll("[data-menu-root]"));
@@ -232,6 +267,9 @@
     "heading1",
     "heading2",
     "heading3",
+    "heading4",
+    "heading5",
+    "heading6",
     "blockquote",
     "bulletList",
     "numberedList",
@@ -268,9 +306,14 @@
     toolbarFrame: null,
     tableContext: null,
     tableSelection: null,
+    spellingContext: null,
+    spellingRequestId: 0,
+    spellcheckEnabled: true,
+    suppressNextDocumentClick: false,
     findQuery: createFindQuery(""),
     findMatches: [],
     findActiveIndex: -1,
+    findReplaceVisible: false,
     findRefreshTimer: null,
     findOverlayTimer: null,
     shortcuts: createDefaultShortcutMap(),
@@ -279,6 +322,7 @@
   };
 
   const bridge = createBridge();
+  document.body.classList.toggle("native-shell", bridge.native && isMacPlatform);
 
   window.InkwellBridgeEvent = (event) => {
     if (event.type === "security" && event.data && event.data.message) {
@@ -315,6 +359,17 @@
 
   tableContextMenu.addEventListener("mousedown", (event) => {
     event.preventDefault();
+  });
+
+  spellingContextMenu.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+  spellingContextMenu.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-spelling-suggestion]");
+    if (!button) {
+      return;
+    }
+    replaceSpellingContext(button.dataset.spellingSuggestion || "");
   });
 
   for (const button of tableMenuButtons) {
@@ -400,8 +455,11 @@
 
   editor.addEventListener("copy", handleEditorCopy);
   editor.addEventListener("cut", handleEditorCut);
+  editor.addEventListener("mousedown", handleEditorMouseDown, true);
+  editor.addEventListener("pointerdown", handleEditorSecondaryPointerDown, true);
   editor.addEventListener("pointerdown", handleEditorPointerDown);
   editor.addEventListener("pointermove", handleEditorPointerMove);
+  editor.addEventListener("auxclick", handleEditorAuxClick, true);
   editor.addEventListener("click", (event) => {
     if (event.target.closest("a")) {
       event.preventDefault();
@@ -411,6 +469,12 @@
   editor.addEventListener("contextmenu", handleEditorContextMenu);
 
   document.addEventListener("click", (event) => {
+    if (state.suppressNextDocumentClick) {
+      state.suppressNextDocumentClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (!event.target.closest("[data-menu-root]")) {
       closeAllMenus();
     }
@@ -419,6 +483,9 @@
     }
     if (!tableContextMenu.contains(event.target)) {
       hideTableContextMenu();
+    }
+    if (!spellingContextMenu.contains(event.target)) {
+      hideSpellingContextMenu();
     }
     if (!editor.contains(event.target) && !tableContextMenu.contains(event.target)) {
       clearTableSelection();
@@ -450,6 +517,7 @@
       }
       hideSelectionToolbar();
       hideTableContextMenu();
+      hideSpellingContextMenu();
       clearTableSelection();
       closeAllMenus();
       return;
@@ -505,6 +573,7 @@
     updateLayout();
     scheduleSelectionToolbarUpdate();
     hideTableContextMenu();
+    hideSpellingContextMenu();
     scheduleFindOverlayRender();
   });
 
@@ -512,6 +581,7 @@
     syncRulerScrollFromDocument();
     scheduleSelectionToolbarUpdate();
     hideTableContextMenu();
+    hideSpellingContextMenu();
     scheduleFindOverlayRender();
   });
 
@@ -560,6 +630,21 @@
       goToFindMatch(event.shiftKey ? -1 : 1);
     }
   });
+  replaceInput.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeFindBar();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (event.shiftKey) {
+        replaceAllFindMatches();
+      } else {
+        replaceActiveFindMatch();
+      }
+    }
+  });
+  replaceButton.addEventListener("click", replaceActiveFindMatch);
+  replaceAllButton.addEventListener("click", replaceAllFindMatches);
   findPreviousButton.addEventListener("click", () => goToFindMatch(-1));
   findNextButton.addEventListener("click", () => goToFindMatch(1));
   findCloseButton.addEventListener("click", closeFindBar);
@@ -603,6 +688,7 @@
       }
     }
 
+    updateMenuCommandStates();
     const title = root.querySelector(".menu-title");
     const panel = root.querySelector(".menu-panel");
     panel.hidden = false;
@@ -626,6 +712,16 @@
     }
   }
 
+  function updateMenuCommandStates() {
+    for (const button of commandButtons) {
+      const command = commandById.get(button.dataset.command);
+      if (!command) {
+        continue;
+      }
+      button.disabled = !commandIsAvailable(command, { target: document.activeElement });
+    }
+  }
+
   function withMenusClosed(action) {
     closeAllMenus();
     action();
@@ -637,6 +733,9 @@
       return false;
     }
 
+    if (command.tableAction) {
+      return runActiveTableAction(command.tableAction);
+    }
     if (command.action) {
       runMenuAction(command.action);
     } else if (command.run) {
@@ -650,6 +749,9 @@
   function commandIsAvailable(command, event) {
     if (command.id === "undo" || command.id === "redo") {
       return !eventTargetsStandaloneTextEntry(event);
+    }
+    if (command.scope === "table") {
+      return Boolean(getActiveTableCell());
     }
     return command.scope !== "editor" || selectionIsInsideEditor();
   }
@@ -1050,11 +1152,13 @@
     editor.focus();
   }
 
-  function openFindBar() {
+  function openFindBar(options = {}) {
     closeAllMenus();
     hideSelectionToolbar();
     hideTableContextMenu();
     clearTableSelection();
+    state.findReplaceVisible = Boolean(options.replace);
+    updateFindMode();
 
     const selectedText = getSelectedText();
     if (selectedText && !/[\r\n]/.test(selectedText) && selectedText.length <= 120) {
@@ -1067,7 +1171,12 @@
     findBar.hidden = false;
     findOverlay.hidden = false;
     rebuildFindMatches(true, { scrollActive: true });
-    focusFindInput(true);
+    if (state.findReplaceVisible && options.focusReplace) {
+      replaceInput.focus();
+      replaceInput.select();
+    } else {
+      focusFindInput(true);
+    }
   }
 
   function closeFindBar() {
@@ -1076,7 +1185,27 @@
     clearFindTimers();
     findOverlay.replaceChildren();
     findInput.blur();
+    replaceInput.blur();
     editor.focus();
+  }
+
+  function updateFindMode() {
+    findBar.classList.toggle("is-replacing", state.findReplaceVisible);
+  }
+
+  function useSelectionForFind() {
+    const selectedText = getSelectedText();
+    if (!selectedText || /[\r\n]/.test(selectedText)) {
+      setStatus("Select a single line of text first");
+      return;
+    }
+    state.findQuery = createFindQuery(selectedText);
+    findInput.value = selectedText;
+    findBar.hidden = false;
+    findOverlay.hidden = false;
+    rebuildFindMatches(true, { scrollActive: true });
+    setStatus("Using selection for find");
+    focusFindInput(true);
   }
 
   function goToFindMatch(direction) {
@@ -1105,6 +1234,74 @@
       : (state.findActiveIndex + direction + count) % count;
     activateFindMatch(nextIndex, true);
     focusFindInput(false);
+  }
+
+  function replaceActiveFindMatch() {
+    if (findBar.hidden || !state.findReplaceVisible) {
+      openFindBar({ replace: true, focusReplace: true });
+    }
+    if (!getFindQueryText()) {
+      focusFindInput(false);
+      return false;
+    }
+    if (!state.findMatches.length) {
+      rebuildFindMatches(true, { scrollActive: true });
+    }
+    const match = state.findMatches[state.findActiveIndex >= 0 ? state.findActiveIndex : 0];
+    const range = match ? createRangeFromFindMatch(match) : null;
+    if (!range) {
+      updateFindControls();
+      return false;
+    }
+
+    withHistoryTransaction("Replace", () => {
+      replaceRangeWithText(range, replaceInput.value);
+    }, {
+      inputType: "insertReplacementText",
+      mergeKey: "replace",
+    });
+    markEdited("Replaced match");
+    rebuildFindMatches(false, { scrollActive: true });
+    replaceInput.focus();
+    return true;
+  }
+
+  function replaceAllFindMatches() {
+    if (findBar.hidden || !state.findReplaceVisible) {
+      openFindBar({ replace: true, focusReplace: true });
+    }
+    if (!getFindQueryText()) {
+      focusFindInput(false);
+      return 0;
+    }
+    rebuildFindMatches(true);
+    const ranges = state.findMatches
+      .map((match) => createRangeFromFindMatch(match))
+      .filter(Boolean)
+      .reverse();
+    if (!ranges.length) {
+      updateFindControls();
+      setStatus("No matches to replace");
+      return 0;
+    }
+
+    withHistoryTransaction("Replace All", () => {
+      for (const range of ranges) {
+        replaceRangeWithText(range, replaceInput.value);
+      }
+    }, {
+      inputType: "insertReplacementText",
+      mergeKey: "replace:all",
+    });
+    markEdited("Replaced " + ranges.length + " matches");
+    rebuildFindMatches(true, { scrollActive: true });
+    replaceInput.focus();
+    return ranges.length;
+  }
+
+  function replaceRangeWithText(range, text) {
+    range.deleteContents();
+    range.insertNode(document.createTextNode(String(text || "")));
   }
 
   function scheduleFindRefresh() {
@@ -1429,6 +1626,12 @@
         document.execCommand("formatBlock", false, "h2");
       } else if (action === "heading3") {
         document.execCommand("formatBlock", false, "h3");
+      } else if (action === "heading4") {
+        document.execCommand("formatBlock", false, "h4");
+      } else if (action === "heading5") {
+        document.execCommand("formatBlock", false, "h5");
+      } else if (action === "heading6") {
+        document.execCommand("formatBlock", false, "h6");
       } else if (action === "blockquote") {
         document.execCommand("formatBlock", false, "blockquote");
       } else if (action === "bulletList") {
@@ -1667,6 +1870,145 @@
       }
     } catch (error) {
       handleBridgeError(error, "Save failed.");
+    }
+  }
+
+  async function pastePlainTextFromCommand() {
+    let text = "";
+    try {
+      if (bridge.native) {
+        const result = await bridge.send("readPlainTextClipboard");
+        text = result.text || "";
+      } else if (navigator.clipboard && typeof navigator.clipboard.readText === "function") {
+        text = await navigator.clipboard.readText();
+      } else {
+        setStatus("Plain text paste is unavailable here");
+        return false;
+      }
+    } catch (error) {
+      handleBridgeError(error, "Plain text paste failed.");
+      return false;
+    }
+
+    withHistoryTransaction("Paste Plain Text", () => {
+      if (hasTableSelection()) {
+        pasteTableText(state.tableSelection, text);
+        clearTableSelection();
+      } else {
+        insertPlainTextWithLineBreaksAtSelection(text);
+      }
+    }, {
+      inputType: "insertFromPaste",
+      mergeKey: "paste:plain",
+    });
+    markEdited("Pasted plain text");
+    return true;
+  }
+
+  async function pageSetup() {
+    if (!bridge.native) {
+      setStatus("Page setup is available in the macOS app");
+      return false;
+    }
+
+    try {
+      const result = await bridge.send("pageSetup", currentPageSetupPayload());
+      applyPageSetupResult(result);
+      setStatus("Page setup updated");
+      return true;
+    } catch (error) {
+      handleBridgeError(error, "Page setup failed.");
+      return false;
+    }
+  }
+
+  async function printDocument() {
+    flushStatsUpdate();
+    if (bridge.native) {
+      try {
+        await bridge.send("printDocument", currentPageSetupPayload());
+        setStatus("Print dialog opened");
+      } catch (error) {
+        handleBridgeError(error, "Print failed.");
+      }
+      return;
+    }
+    window.print();
+  }
+
+  async function exportMarkdown() {
+    const content = getMarkdownContent();
+    await exportContent({
+      format: "markdown",
+      name: suggestedExportName(".md"),
+      content,
+    });
+  }
+
+  async function exportHTML() {
+    await exportContent({
+      format: "html",
+      name: suggestedExportName(".html"),
+      content: buildStandaloneHTMLExport(),
+    });
+  }
+
+  async function exportContent(payload) {
+    try {
+      if (bridge.native) {
+        const result = await bridge.send("exportFile", payload);
+        setStatus("Exported " + (result.name || payload.name));
+      } else {
+        const type = payload.format === "html" ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8";
+        downloadBlob(payload.content || "", payload.name, type);
+        setStatus("Exported " + payload.name);
+      }
+    } catch (error) {
+      handleBridgeError(error, "Export failed.");
+    }
+  }
+
+  async function startSpeaking() {
+    const text = getSelectedText() || editor.innerText || "";
+    if (!text.trim()) {
+      setStatus("No text to speak");
+      return false;
+    }
+
+    if (bridge.native) {
+      try {
+        await bridge.send("startSpeaking", { text });
+        setStatus("Speaking");
+        return true;
+      } catch (error) {
+        handleBridgeError(error, "Speech failed.");
+        return false;
+      }
+    }
+
+    if ("speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined") {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      setStatus("Speaking");
+      return true;
+    }
+    setStatus("Speech is unavailable here");
+    return false;
+  }
+
+  async function stopSpeaking() {
+    if (bridge.native) {
+      try {
+        await bridge.send("stopSpeaking");
+        setStatus("Speech stopped");
+      } catch (error) {
+        handleBridgeError(error, "Could not stop speech.");
+      }
+      return;
+    }
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setStatus("Speech stopped");
     }
   }
 
@@ -2589,6 +2931,20 @@
     insertNodesAtSelection([document.createTextNode(text)]);
   }
 
+  function insertPlainTextWithLineBreaksAtSelection(text) {
+    const nodes = [];
+    const lines = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+    lines.forEach((line, index) => {
+      if (index > 0) {
+        nodes.push(document.createElement("br"));
+      }
+      if (line) {
+        nodes.push(document.createTextNode(line));
+      }
+    });
+    insertNodesAtSelection(nodes.length ? nodes : [document.createTextNode("")]);
+  }
+
   function insertNodesAtSelection(nodes) {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
@@ -2700,18 +3056,450 @@
     insertBlocksAtSelection([rule, paragraph], paragraph, false);
   }
 
+  function handleEditorMouseDown(event) {
+    if (!isSecondaryEditorEvent(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    state.suppressNextDocumentClick = true;
+    handleEditorContextMenu(event);
+  }
+
+  function handleEditorSecondaryPointerDown(event) {
+    if (!isSecondaryEditorEvent(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    state.suppressNextDocumentClick = true;
+    handleEditorContextMenu(event);
+  }
+
+  function handleEditorAuxClick(event) {
+    if (!isSecondaryEditorEvent(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    state.suppressNextDocumentClick = true;
+    handleEditorContextMenu(event);
+  }
+
+  function isSecondaryEditorEvent(event) {
+    return event.button === 2 || (isMacPlatform && event.button === 0 && event.ctrlKey);
+  }
+
   function handleEditorContextMenu(event) {
+    event.preventDefault();
+    event.stopPropagation();
     const cell = event.target.closest("th, td");
-    if (!cell || !editor.contains(cell)) {
-      hideTableContextMenu();
-      clearTableSelection();
+    if (cell && editor.contains(cell)) {
+      closeAllMenus();
+      hideSelectionToolbar();
+      hideSpellingContextMenu();
+      openTableContextMenu(cell, event.clientX, event.clientY);
+      return;
+    }
+
+    hideTableContextMenu();
+    clearTableSelection();
+    handleSpellingContextMenu(event);
+  }
+
+  function handleSpellingContextMenu(event) {
+    hideSpellingContextMenu();
+    if (!bridge.native) {
       return;
     }
 
     event.preventDefault();
     closeAllMenus();
     hideSelectionToolbar();
-    openTableContextMenu(cell, event.clientX, event.clientY);
+
+    const wordContext = getWordContextAtPoint(event.clientX, event.clientY) || getWordContextFromSelection();
+    if (!wordContext) {
+      return;
+    }
+
+    requestSpellingSuggestions(wordContext, event.clientX, event.clientY);
+  }
+
+  function showSpellingSuggestionsForCurrentWord() {
+    if (!bridge.native) {
+      setStatus("Spelling suggestions unavailable");
+      return false;
+    }
+
+    const wordContext = getWordContextFromSelection();
+    if (!wordContext) {
+      setStatus("Place the cursor in a word to show spelling suggestions");
+      return false;
+    }
+
+    const point = getSpellingMenuPoint(wordContext.range);
+    requestSpellingSuggestions(wordContext, point.clientX, point.clientY);
+    return true;
+  }
+
+  function checkDocumentSpelling() {
+    if (!bridge.native) {
+      setStatus("Spelling check unavailable");
+      return false;
+    }
+
+    const words = collectSpellingWordContexts();
+    if (!words.length) {
+      setStatus("No words to check");
+      return false;
+    }
+
+    let index = 0;
+    const checkNext = () => {
+      const wordContext = words[index];
+      index += 1;
+      if (!wordContext) {
+        setStatus("No spelling issues found");
+        return;
+      }
+
+      bridge.send("spellingSuggestions", { word: wordContext.word })
+        .then((result) => {
+          if (result && result.misspelled) {
+            const selection = window.getSelection();
+            if (selection) {
+              selection.removeAllRanges();
+              selection.addRange(wordContext.range.cloneRange());
+            }
+            const point = getSpellingMenuPoint(wordContext.range);
+            requestSpellingSuggestions(wordContext, point.clientX, point.clientY);
+            setStatus("Spelling issue: " + wordContext.word);
+            return;
+          }
+          checkNext();
+        })
+        .catch(() => {
+          setStatus("Spelling check unavailable");
+        });
+    };
+
+    checkNext();
+    return true;
+  }
+
+  function toggleContinuousSpellcheck() {
+    state.spellcheckEnabled = !state.spellcheckEnabled;
+    editor.spellcheck = state.spellcheckEnabled;
+    setStatus(state.spellcheckEnabled ? "Spelling while typing on" : "Spelling while typing off");
+    return true;
+  }
+
+  function checkDocumentGrammar() {
+    if (!bridge.native) {
+      setStatus("Grammar check unavailable");
+      return false;
+    }
+
+    const text = getRenderedStatsText();
+    if (!String(text || "").trim()) {
+      setStatus("No text to check");
+      return false;
+    }
+
+    bridge.send("grammarCheck", { text })
+      .then((result) => {
+        if (result && result.hasIssue) {
+          const detail = String(result.description || "").trim();
+          setStatus(detail ? "Grammar: " + detail : "Grammar issue found");
+          return;
+        }
+        setStatus("No grammar issues found");
+      })
+      .catch(() => {
+        setStatus("Grammar check unavailable");
+      });
+    return true;
+  }
+
+  function requestSpellingSuggestions(wordContext, clientX, clientY) {
+    const requestId = ++state.spellingRequestId;
+    state.spellingContext = {
+      requestId,
+      word: wordContext.word,
+      range: wordContext.range,
+    };
+    renderSpellingContextMenu(wordContext.word, [], {
+      loading: true,
+      clientX,
+      clientY,
+    });
+
+    bridge.send("spellingSuggestions", { word: wordContext.word })
+      .then((result) => {
+        if (!state.spellingContext || state.spellingContext.requestId !== requestId) {
+          return;
+        }
+        const suggestions = Array.isArray(result.suggestions)
+          ? result.suggestions
+            .map((value) => String(value || "").trim())
+            .filter((value, index, list) => value && value !== wordContext.word && list.indexOf(value) === index)
+            .slice(0, 6)
+          : [];
+        renderSpellingContextMenu(wordContext.word, suggestions, {
+          misspelled: Boolean(result.misspelled),
+          clientX,
+          clientY,
+        });
+      })
+      .catch(() => {
+        if (state.spellingContext && state.spellingContext.requestId === requestId) {
+          hideSpellingContextMenu();
+          setStatus("Spelling suggestions unavailable");
+        }
+      });
+  }
+
+  function getSpellingMenuPoint(range) {
+    const rect = range && typeof range.getBoundingClientRect === "function"
+      ? range.getBoundingClientRect()
+      : null;
+    return {
+      clientX: rect && rect.left ? rect.left : Math.round(window.innerWidth / 2),
+      clientY: rect && rect.bottom ? rect.bottom + 4 : Math.round(window.innerHeight / 2),
+    };
+  }
+
+  function collectSpellingWordContexts() {
+    const contexts = [];
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let textNode = walker.nextNode();
+    while (textNode) {
+      const text = textNode.nodeValue || "";
+      const matches = text.matchAll(/[\p{L}\p{M}'’-]+/gu);
+      for (const match of matches) {
+        const word = match[0];
+        const index = match.index || 0;
+        if (!/\p{L}/u.test(word)) {
+          continue;
+        }
+        const range = document.createRange();
+        range.setStart(textNode, index);
+        range.setEnd(textNode, index + word.length);
+        contexts.push({ word, range });
+      }
+      textNode = walker.nextNode();
+    }
+    return contexts;
+  }
+
+  function getWordContextAtPoint(clientX, clientY) {
+    const range = createCaretRangeFromPoint(clientX, clientY);
+    if (!range) {
+      return null;
+    }
+
+    const textPoint = resolveTextPoint(range.startContainer, range.startOffset);
+    if (!textPoint || !editor.contains(textPoint.node)) {
+      return null;
+    }
+
+    return getWordContextFromTextPoint(textPoint);
+  }
+
+  function getWordContextFromSelection() {
+    const selection = window.getSelection();
+    if (!selection || !selection.anchorNode || !selectionIsInsideEditor()) {
+      return null;
+    }
+
+    if (!selection.isCollapsed && selection.rangeCount > 0) {
+      const selectedText = selection.toString().trim();
+      if (selectedText && isSingleSpellingWord(selectedText)) {
+        const range = selection.getRangeAt(0).cloneRange();
+        return {
+          word: selectedText,
+          range,
+        };
+      }
+    }
+
+    const textPoint = resolveTextPoint(selection.anchorNode, selection.anchorOffset);
+    return textPoint ? getWordContextFromTextPoint(textPoint) : null;
+  }
+
+  function getWordContextFromTextPoint(textPoint) {
+    const text = textPoint.node.nodeValue || "";
+    let index = clamp(textPoint.offset, 0, text.length);
+    if (index >= text.length || !isSpellingWordCharacter(text[index])) {
+      if (index > 0 && isSpellingWordCharacter(text[index - 1])) {
+        index -= 1;
+      } else if (index < text.length - 1 && isSpellingWordCharacter(text[index + 1])) {
+        index += 1;
+      } else {
+        return null;
+      }
+    }
+
+    let start = index;
+    let end = index + 1;
+    while (start > 0 && isSpellingWordCharacter(text[start - 1])) {
+      start -= 1;
+    }
+    while (end < text.length && isSpellingWordCharacter(text[end])) {
+      end += 1;
+    }
+
+    const word = text.slice(start, end);
+    if (!/\p{L}/u.test(word)) {
+      return null;
+    }
+
+    const wordRange = document.createRange();
+    wordRange.setStart(textPoint.node, start);
+    wordRange.setEnd(textPoint.node, end);
+    return {
+      word,
+      range: wordRange,
+    };
+  }
+
+  function createCaretRangeFromPoint(clientX, clientY) {
+    if (typeof document.caretRangeFromPoint === "function") {
+      return document.caretRangeFromPoint(clientX, clientY);
+    }
+    if (typeof document.caretPositionFromPoint === "function") {
+      const position = document.caretPositionFromPoint(clientX, clientY);
+      if (!position) {
+        return null;
+      }
+      const range = document.createRange();
+      range.setStart(position.offsetNode, position.offset);
+      range.collapse(true);
+      return range;
+    }
+    return null;
+  }
+
+  function resolveTextPoint(node, offset) {
+    if (!node) {
+      return null;
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      return { node, offset };
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return null;
+    }
+
+    const childNodes = Array.from(node.childNodes);
+    const nearby = [
+      childNodes[offset],
+      childNodes[offset - 1],
+      node,
+    ];
+    for (const candidate of nearby) {
+      const textNode = findNearestTextNode(candidate);
+      if (textNode) {
+        return {
+          node: textNode,
+          offset: candidate === childNodes[offset - 1] ? (textNode.nodeValue || "").length : 0,
+        };
+      }
+    }
+    return null;
+  }
+
+  function findNearestTextNode(node) {
+    if (!node) {
+      return null;
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node;
+    }
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    return walker.nextNode();
+  }
+
+  function isSpellingWordCharacter(character) {
+    return Boolean(character && /[\p{L}\p{M}'’-]/u.test(character));
+  }
+
+  function isSingleSpellingWord(text) {
+    return /^[\p{L}\p{M}'’-]+$/u.test(String(text || ""));
+  }
+
+  function renderSpellingContextMenu(word, suggestions, options = {}) {
+    spellingContextMenu.replaceChildren();
+    if (options.loading) {
+      const loading = document.createElement("button");
+      loading.className = "spelling-menu-item";
+      loading.type = "button";
+      loading.disabled = true;
+      loading.textContent = "Looking up \"" + word + "\"";
+      spellingContextMenu.append(loading);
+    } else if (suggestions.length) {
+      for (const suggestion of suggestions) {
+        const button = document.createElement("button");
+        button.className = "spelling-menu-item";
+        button.type = "button";
+        button.setAttribute("role", "menuitem");
+        button.dataset.spellingSuggestion = suggestion;
+        button.textContent = suggestion;
+        spellingContextMenu.append(button);
+      }
+    } else {
+      const empty = document.createElement("button");
+      empty.className = "spelling-menu-item";
+      empty.type = "button";
+      empty.disabled = true;
+      empty.textContent = options.misspelled ? "No Suggestions" : "No Spelling Suggestions";
+      spellingContextMenu.append(empty);
+    }
+
+    spellingContextMenu.hidden = false;
+    const rect = spellingContextMenu.getBoundingClientRect();
+    const left = clamp(options.clientX || 8, 8, window.innerWidth - rect.width - 8);
+    const top = clamp(options.clientY || 8, 8, window.innerHeight - rect.height - 8);
+    spellingContextMenu.style.left = left + "px";
+    spellingContextMenu.style.top = top + "px";
+  }
+
+  function replaceSpellingContext(suggestion) {
+    const context = state.spellingContext;
+    if (!context || !context.range || !suggestion) {
+      hideSpellingContextMenu();
+      return false;
+    }
+
+    editor.focus();
+    withHistoryTransaction("Correct Spelling", () => {
+      context.range.deleteContents();
+      const textNode = document.createTextNode(suggestion);
+      context.range.insertNode(textNode);
+      const selection = window.getSelection();
+      if (selection) {
+        const range = document.createRange();
+        range.setStartAfter(textNode);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }, {
+      inputType: "insertReplacementText",
+      mergeKey: "spelling",
+    });
+    hideSpellingContextMenu();
+    markEdited("Corrected spelling");
+    return true;
+  }
+
+  function hideSpellingContextMenu() {
+    spellingContextMenu.hidden = true;
+    spellingContextMenu.replaceChildren();
+    state.spellingContext = null;
   }
 
   function openTableContextMenu(cell, clientX, clientY) {
@@ -2791,6 +3579,24 @@
     hideTableContextMenu();
     clearTableSelection();
     markEdited("Table updated");
+  }
+
+  function runActiveTableAction(action) {
+    const activeCell = getActiveTableCell();
+    if (!activeCell) {
+      setStatus("Place the cursor in a table first");
+      return false;
+    }
+
+    const table = activeCell.closest("table");
+    const selectedCells = getSelectedTableCells(table);
+    state.tableContext = {
+      table,
+      cell: activeCell,
+      cells: selectedCells.length ? selectedCells : [activeCell],
+    };
+    runTableAction(action);
+    return true;
   }
 
   function insertTableRow(context, placement) {
@@ -3791,7 +4597,8 @@
 
     ruler.hidden = !documentSettings.rulerVisible;
     document.body.classList.toggle("ruler-hidden", !documentSettings.rulerVisible);
-    zoomState.textContent = documentSettings.zoom + "%";
+    zoomState.hidden = documentSettings.zoom === 100;
+    zoomState.textContent = "Zoom " + documentSettings.zoom + "%";
     updateRulerLabels();
     updateRulerGeometry(marginLeftPx, marginRightPx);
     syncRulerScrollFromDocument();
@@ -4033,15 +4840,199 @@
   }
 
   function downloadMarkdown(content) {
-    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    downloadBlob(content, state.name || "Untitled.md", "text/markdown;charset=utf-8");
+  }
+
+  function downloadBlob(content, name, type) {
+    const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = state.name || "Untitled.md";
+    link.download = name;
     document.body.append(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function currentPageSetupPayload() {
+    return {
+      pageWidthIn: documentSettings.pageWidthIn,
+      pageHeightIn: documentSettings.pageHeightIn,
+      marginLeftIn: documentSettings.marginLeftIn,
+      marginRightIn: documentSettings.marginRightIn,
+    };
+  }
+
+  function applyPageSetupResult(result) {
+    if (!result || typeof result !== "object") {
+      return;
+    }
+    const pageWidthIn = Number(result.pageWidthIn);
+    const pageHeightIn = Number(result.pageHeightIn);
+    const marginLeftIn = Number(result.marginLeftIn);
+    const marginRightIn = Number(result.marginRightIn);
+    if (Number.isFinite(pageWidthIn) && Number.isFinite(pageHeightIn)) {
+      documentSettings.pageWidthIn = clamp(pageWidthIn, MIN_PAGE_WIDTH_IN, MAX_PAGE_WIDTH_IN);
+      documentSettings.pageHeightIn = Math.max(MIN_CONTENT_IN, pageHeightIn);
+    }
+    if (Number.isFinite(marginLeftIn)) {
+      documentSettings.marginLeftIn = Math.max(MIN_MARGIN_IN, marginLeftIn);
+    }
+    if (Number.isFinite(marginRightIn)) {
+      documentSettings.marginRightIn = Math.max(MIN_MARGIN_IN, marginRightIn);
+    }
+    clampMargins();
+    updateLayout();
+  }
+
+  function suggestedExportName(extension) {
+    const base = String(state.name || "Untitled")
+      .replace(/\.[^.]*$/, "")
+      .replace(/[/:\\]/g, "-")
+      .trim() || "Untitled";
+    return base + extension;
+  }
+
+  function buildStandaloneHTMLExport() {
+    const clone = editor.cloneNode(true);
+    sanitizeExportHTML(clone);
+    const title = escapeHTML(state.name || "Inkwell Document");
+    const bodyMarkup = serializeExportChildren(clone);
+    return "<!doctype html>\n" +
+      "<html lang=\"en\">\n" +
+      "<head>\n" +
+      "  <meta charset=\"utf-8\">\n" +
+      "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n" +
+      "  <title>" + title + "</title>\n" +
+      "  <style>\n" +
+      "    body { margin: 2rem auto; max-width: 760px; font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #202521; }\n" +
+      "    table { border-collapse: collapse; width: 100%; }\n" +
+      "    th, td { border: 1px solid #d8ded8; padding: 0.45rem 0.55rem; vertical-align: top; }\n" +
+      "    pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }\n" +
+      "    pre { padding: 1rem; overflow-x: auto; background: #f4f6f4; }\n" +
+      "    blockquote { border-left: 3px solid #7d8a7e; margin-left: 0; padding-left: 1rem; color: #526055; }\n" +
+      "  </style>\n" +
+      "</head>\n" +
+      "<body>\n" +
+      bodyMarkup +
+      "\n</body>\n</html>\n";
+  }
+
+  function sanitizeExportHTML(root) {
+    for (const node of Array.from(root.querySelectorAll("script, style, iframe, object, embed, img"))) {
+      node.remove();
+    }
+    for (const element of Array.from(root.querySelectorAll("*"))) {
+      for (const attribute of Array.from(element.attributes)) {
+        const name = attribute.name.toLowerCase();
+        if (name.startsWith("on") || name === "contenteditable" || name === "class") {
+          element.removeAttribute(attribute.name);
+        }
+      }
+      if (element.tagName.toLowerCase() === "a") {
+        const href = window.InkwellMarkdown.sanitizeHref(element.getAttribute("href"));
+        if (href) {
+          element.setAttribute("href", href);
+          element.setAttribute("rel", "noreferrer noopener");
+        } else {
+          element.removeAttribute("href");
+        }
+      }
+    }
+  }
+
+  function serializeExportChildren(root) {
+    let output = "";
+    for (const child of Array.from(root.childNodes)) {
+      output += serializeExportNode(child);
+    }
+    return output;
+  }
+
+  function serializeExportNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return escapeHTML(node.nodeValue || "");
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return "";
+    }
+
+    const tag = node.tagName.toLowerCase();
+    const allowedTags = new Set([
+      "a",
+      "blockquote",
+      "br",
+      "code",
+      "del",
+      "em",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "hr",
+      "input",
+      "li",
+      "ol",
+      "p",
+      "pre",
+      "s",
+      "strong",
+      "table",
+      "tbody",
+      "td",
+      "th",
+      "thead",
+      "tr",
+      "ul",
+    ]);
+    if (!allowedTags.has(tag)) {
+      return serializeExportChildren(node);
+    }
+
+    const attributes = serializeExportAttributes(node, tag);
+    if (tag === "br" || tag === "hr" || tag === "input") {
+      return "<" + tag + attributes + ">";
+    }
+    return "<" + tag + attributes + ">" + serializeExportChildren(node) + "</" + tag + ">";
+  }
+
+  function serializeExportAttributes(element, tag) {
+    const attributes = [];
+    if (tag === "a") {
+      const href = window.InkwellMarkdown.sanitizeHref(element.getAttribute("href"));
+      if (href) {
+        attributes.push(["href", href], ["rel", "noreferrer noopener"]);
+      }
+      const title = element.getAttribute("title");
+      if (title) {
+        attributes.push(["title", title]);
+      }
+    } else if (tag === "td" || tag === "th") {
+      const align = element.dataset.align;
+      if (align === "left" || align === "center" || align === "right") {
+        attributes.push(["style", "text-align: " + align]);
+      }
+    } else if (tag === "input" && element.getAttribute("type") === "checkbox") {
+      attributes.push(["type", "checkbox"], ["disabled", ""]);
+      if (element.checked) {
+        attributes.push(["checked", ""]);
+      }
+    }
+
+    return attributes
+      .map(([name, value]) => value === "" ? " " + name : " " + name + "=\"" + escapeHTML(value) + "\"")
+      .join("");
+  }
+
+  function escapeHTML(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function handleBridgeError(error, fallbackMessage) {

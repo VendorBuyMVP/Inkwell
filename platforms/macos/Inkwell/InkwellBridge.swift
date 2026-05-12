@@ -57,6 +57,25 @@ final class InkwellBridge: NSObject, WKScriptMessageHandler {
                 data: try windowController.saveFile(payload: request.payload, forceDialog: true),
                 error: nil
             )
+        case "readPlainTextClipboard":
+            reply(id: request.id, ok: true, data: windowController.readPlainTextClipboard(), error: nil)
+        case "pageSetup":
+            reply(id: request.id, ok: true, data: try windowController.pageSetup(payload: request.payload), error: nil)
+        case "printDocument":
+            try windowController.printDocument(payload: request.payload)
+            reply(id: request.id, ok: true, data: [:], error: nil)
+        case "exportFile":
+            reply(id: request.id, ok: true, data: try windowController.exportFile(payload: request.payload), error: nil)
+        case "startSpeaking":
+            try windowController.startSpeaking(payload: request.payload)
+            reply(id: request.id, ok: true, data: [:], error: nil)
+        case "stopSpeaking":
+            windowController.stopSpeaking()
+            reply(id: request.id, ok: true, data: [:], error: nil)
+        case "spellingSuggestions":
+            reply(id: request.id, ok: true, data: try windowController.spellingSuggestions(payload: request.payload), error: nil)
+        case "grammarCheck":
+            reply(id: request.id, ok: true, data: try windowController.grammarCheck(payload: request.payload), error: nil)
         case "loadPreferences":
             reply(id: request.id, ok: true, data: try preferencesStore.loadPreferences(), error: nil)
         case "savePreferences":

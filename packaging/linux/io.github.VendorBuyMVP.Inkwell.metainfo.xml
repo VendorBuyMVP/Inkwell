@@ -35,10 +35,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.7.3/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.8.0/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.8.0" date="2026-05-12">
+      <description>
+        <p>Adds a refreshed Inkwell icon, expanded macOS menus, native macOS spelling suggestions, local grammar status checks, read-aloud controls, print/page/export commands, find and replace, and zoom status display.</p>
+      </description>
+    </release>
     <release version="0.7.3" date="2026-05-08">
       <description>
         <p>Fixes table paste handling so tab-delimited spreadsheet data with pipe characters inside cells expands tables correctly instead of being misread as Markdown table syntax.</p>
