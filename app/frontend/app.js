@@ -238,6 +238,10 @@
   const shortcutDefaultsButton = document.getElementById("shortcutDefaultsButton");
   const shortcutCancelButton = document.getElementById("shortcutCancelButton");
   const shortcutSaveButton = document.getElementById("shortcutSaveButton");
+  const markdownDefaultModal = document.getElementById("markdownDefaultModal");
+  const markdownDefaultMakeButton = document.getElementById("markdownDefaultMakeButton");
+  const markdownDefaultNotNowButton = document.getElementById("markdownDefaultNotNowButton");
+  const markdownDefaultDismissButton = document.getElementById("markdownDefaultDismissButton");
   const findBar = document.getElementById("findBar");
   const findInput = document.getElementById("findInput");
   const replaceInput = document.getElementById("replaceInput");
@@ -318,6 +322,8 @@
     findOverlayTimer: null,
     shortcuts: createDefaultShortcutMap(),
     shortcutPreferencesLoaded: false,
+    markdownDefaultPromptChoice: "",
+    markdownDefaultPromptShown: false,
     history: createHistoryState(),
   };
 
@@ -503,6 +509,10 @@
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      if (!markdownDefaultModal.hidden) {
+        closeMarkdownDefaultPrompt();
+        return;
+      }
       if (!shortcutModal.hidden) {
         closeShortcutDialog();
         return;
@@ -523,7 +533,7 @@
       return;
     }
 
-    if (!shortcutModal.hidden) {
+    if (!shortcutModal.hidden || !markdownDefaultModal.hidden) {
       return;
     }
 
@@ -615,6 +625,18 @@
   shortcutModal.addEventListener("click", (event) => {
     if (event.target === shortcutModal) {
       closeShortcutDialog();
+    }
+  });
+  markdownDefaultMakeButton.addEventListener("click", () => {
+    makeMarkdownDefaultEditor();
+  });
+  markdownDefaultNotNowButton.addEventListener("click", closeMarkdownDefaultPrompt);
+  markdownDefaultDismissButton.addEventListener("click", () => {
+    dismissMarkdownDefaultPromptPermanently();
+  });
+  markdownDefaultModal.addEventListener("click", (event) => {
+    if (event.target === markdownDefaultModal) {
+      closeMarkdownDefaultPrompt();
     }
   });
   findInput.addEventListener("input", () => {
@@ -975,9 +997,11 @@
       applyPreferences(result.preferences || {});
       state.shortcutPreferencesLoaded = true;
       refreshShortcutMenuLabels();
+      scheduleMarkdownDefaultPrompt();
     } catch (error) {
       state.shortcutPreferencesLoaded = true;
       setStatus("Using default shortcuts");
+      scheduleMarkdownDefaultPrompt();
     }
   }
 
@@ -987,6 +1011,10 @@
     }
 
     const shortcuts = preferences.shortcuts;
+    const markdownDefaultPromptChoice = preferences.markdownDefaultPromptChoice;
+    if (["accepted", "dismissed"].includes(markdownDefaultPromptChoice)) {
+      state.markdownDefaultPromptChoice = markdownDefaultPromptChoice;
+    }
     if (!shortcuts || typeof shortcuts !== "object" || Array.isArray(shortcuts)) {
       return;
     }
@@ -1024,12 +1052,92 @@
     for (const command of editableShortcutCommands) {
       shortcuts[command.id] = getShortcutText(command.id);
     }
-    await bridge.send("savePreferences", {
-      preferences: {
-        version: 1,
-        shortcuts,
-      },
-    });
+    const preferences = {
+      version: 1,
+      shortcuts,
+    };
+    if (["accepted", "dismissed"].includes(state.markdownDefaultPromptChoice)) {
+      preferences.markdownDefaultPromptChoice = state.markdownDefaultPromptChoice;
+    }
+    await bridge.send("savePreferences", { preferences });
+  }
+
+  function scheduleMarkdownDefaultPrompt() {
+    if (!bridge.native || !isMacPlatform || state.markdownDefaultPromptShown) {
+      return;
+    }
+    if (["accepted", "dismissed"].includes(state.markdownDefaultPromptChoice)) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      showMarkdownDefaultPromptIfNeeded();
+    }, 700);
+  }
+
+  async function showMarkdownDefaultPromptIfNeeded() {
+    if (!bridge.native || !isMacPlatform || state.markdownDefaultPromptShown) {
+      return;
+    }
+    if (["accepted", "dismissed"].includes(state.markdownDefaultPromptChoice)) {
+      return;
+    }
+    if (!confirmModal.hidden || !shortcutModal.hidden || !markdownDefaultModal.hidden) {
+      scheduleMarkdownDefaultPrompt();
+      return;
+    }
+
+    try {
+      const result = await bridge.send("markdownDefaultEditorStatus");
+      if (result && result.isDefault) {
+        return;
+      }
+      state.markdownDefaultPromptShown = true;
+      markdownDefaultModal.hidden = false;
+      markdownDefaultMakeButton.focus();
+    } catch (error) {
+      // If LaunchServices status is unavailable, avoid nagging.
+    }
+  }
+
+  async function makeMarkdownDefaultEditor() {
+    markdownDefaultMakeButton.disabled = true;
+    markdownDefaultDismissButton.disabled = true;
+    markdownDefaultNotNowButton.disabled = true;
+
+    try {
+      const result = await bridge.send("makeMarkdownDefaultEditor");
+      if (result && result.isDefault) {
+        state.markdownDefaultPromptChoice = "accepted";
+        await persistPreferences();
+        closeMarkdownDefaultPrompt();
+        setStatus("Inkwell is now the default Markdown editor");
+        return;
+      }
+      setStatus("Default Markdown editor could not be changed");
+    } catch (error) {
+      handleBridgeError(error, "Default Markdown editor could not be changed.");
+    } finally {
+      markdownDefaultMakeButton.disabled = false;
+      markdownDefaultDismissButton.disabled = false;
+      markdownDefaultNotNowButton.disabled = false;
+    }
+  }
+
+  async function dismissMarkdownDefaultPromptPermanently() {
+    state.markdownDefaultPromptChoice = "dismissed";
+    try {
+      await persistPreferences();
+      closeMarkdownDefaultPrompt();
+      setStatus("Default editor prompt dismissed");
+    } catch (error) {
+      handleBridgeError(error, "Could not save preference.");
+    }
+  }
+
+  function closeMarkdownDefaultPrompt() {
+    markdownDefaultModal.hidden = true;
+    editor.focus();
   }
 
   function openShortcutDialog() {

@@ -64,6 +64,13 @@ enum JSONValue: Codable, Equatable {
         return nil
     }
 
+    var arrayValue: [JSONValue]? {
+        if case .array(let value) = self {
+            return value
+        }
+        return nil
+    }
+
     var intValue: Int? {
         if case .number(let value) = self, value.rounded() == value {
             return Int(value)

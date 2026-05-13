@@ -76,6 +76,10 @@ final class InkwellBridge: NSObject, WKScriptMessageHandler {
             reply(id: request.id, ok: true, data: try windowController.spellingSuggestions(payload: request.payload), error: nil)
         case "grammarCheck":
             reply(id: request.id, ok: true, data: try windowController.grammarCheck(payload: request.payload), error: nil)
+        case "markdownDefaultEditorStatus":
+            reply(id: request.id, ok: true, data: windowController.markdownDefaultEditorStatus(), error: nil)
+        case "makeMarkdownDefaultEditor":
+            reply(id: request.id, ok: true, data: try windowController.makeMarkdownDefaultEditor(), error: nil)
         case "loadPreferences":
             reply(id: request.id, ok: true, data: try preferencesStore.loadPreferences(), error: nil)
         case "savePreferences":

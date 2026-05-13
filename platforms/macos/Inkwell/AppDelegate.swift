@@ -4,6 +4,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowControllers: [InkwellWindowController] = []
     private var pendingOpenURLs: [URL] = []
     private let runtimeOptions = AppRuntimeOptions.parse(arguments: CommandLine.arguments)
+    private let preferencesStore = PreferencesStore()
+    private weak var openRecentMenu: NSMenu?
     private var didFinishLaunching = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -77,6 +79,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowControllers.removeAll { $0 === controller }
     }
 
+    func noteRecentDocument(_ url: URL) {
+        do {
+            _ = try preferencesStore.noteRecentDocument(url)
+            rebuildOpenRecentMenu()
+        } catch {
+            // Recent documents are convenience state; document open/save should not fail because this failed.
+        }
+    }
+
     private func openDocuments(_ urls: [URL]) {
         for (index, url) in urls.enumerated() {
             newWindow(
@@ -112,6 +123,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openDocumentFromMenu(_ sender: Any?) {
         focusedWindowController?.invokeFrontendCommand("open") ?? newWindow()
+    }
+
+    @objc private func openRecentDocumentFromMenu(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else {
+            return
+        }
+
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            do {
+                _ = try preferencesStore.removeRecentDocument(url)
+                rebuildOpenRecentMenu()
+            } catch {
+                // Ignore stale recent cleanup failures.
+            }
+            showMissingRecentDocumentAlert(name: url.lastPathComponent)
+            return
+        }
+
+        openDocuments([url])
+    }
+
+    @objc private func clearRecentDocumentsFromMenu(_ sender: Any?) {
+        do {
+            _ = try preferencesStore.clearRecentDocuments()
+            rebuildOpenRecentMenu()
+        } catch {
+            // Ignore convenience-state cleanup failures.
+        }
     }
 
     @objc private func saveDocumentFromMenu(_ sender: Any?) {
@@ -216,6 +256,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(openDocumentFromMenu(_:)),
             keyEquivalent: "o"
         )
+        let openRecentItem = fileMenu.addItem(withTitle: "Open Recent", action: nil, keyEquivalent: "")
+        let openRecentMenu = NSMenu(title: "Open Recent")
+        openRecentItem.submenu = openRecentMenu
+        self.openRecentMenu = openRecentMenu
+        rebuildOpenRecentMenu()
         fileMenu.addItem(.separator())
         addTargetedItem(
             to: fileMenu,
@@ -716,5 +761,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.representedObject = commandID
         item.keyEquivalentModifierMask = modifiers
         return item
+    }
+
+    private func rebuildOpenRecentMenu() {
+        guard let openRecentMenu else {
+            return
+        }
+
+        openRecentMenu.removeAllItems()
+        let paths = (try? preferencesStore.recentDocumentPaths()) ?? []
+        let existingPaths = paths.filter { FileManager.default.fileExists(atPath: $0) }
+
+        if existingPaths.isEmpty {
+            let emptyItem = openRecentMenu.addItem(withTitle: "No Recent Documents", action: nil, keyEquivalent: "")
+            emptyItem.isEnabled = false
+            return
+        }
+
+        for path in existingPaths {
+            let url = URL(fileURLWithPath: path)
+            let item = openRecentMenu.addItem(
+                withTitle: url.lastPathComponent,
+                action: #selector(openRecentDocumentFromMenu(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = path
+            item.toolTip = path
+        }
+
+        openRecentMenu.addItem(.separator())
+        let clearItem = openRecentMenu.addItem(
+            withTitle: "Clear Menu",
+            action: #selector(clearRecentDocumentsFromMenu(_:)),
+            keyEquivalent: ""
+        )
+        clearItem.target = self
+    }
+
+    private func showMissingRecentDocumentAlert(name: String) {
+        let alert = NSAlert()
+        alert.messageText = "Recent document unavailable"
+        alert.informativeText = "\(name) could not be found and was removed from Open Recent."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 }

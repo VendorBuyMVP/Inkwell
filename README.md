@@ -9,6 +9,7 @@ It stores Markdown files locally and does not require accounts, sync, telemetry,
 ## Features
 
 - Open, save, save as, and new document workflows
+- Recent document access on macOS
 - Multi-window editing
 - Find and replace, Use Selection for Find, and keyboard navigation
 - Dark and light themes, with macOS system appearance support
@@ -48,6 +49,8 @@ macOS requirements:
 - Xcode Command Line Tools or Xcode with Swift, AppKit, WebKit, `sips`, `iconutil`, and `codesign`
 
 The macOS build is currently a local development build. It is not notarized, sandboxed, or distributed through the Mac App Store.
+
+On first launch, the macOS app may offer to make Inkwell the default editor for Markdown files. Choosing "Don't Ask Again" saves that preference locally and suppresses the prompt on future launches.
 
 ## Run From Source
 
@@ -126,6 +129,36 @@ Run macOS local build verification:
 ```bash
 npm run macos:smoke
 ```
+
+## Contributing
+
+Contributions are welcome. Please fork the repository, create a focused branch, and submit a pull request with:
+
+- A concise summary of what changed
+- The user-facing impact
+- Screenshots or notes for UI changes
+- The checks you ran
+
+Before opening a pull request, run:
+
+```bash
+npm run check
+```
+
+For macOS work, also run:
+
+```bash
+npm run macos:build
+npm run macos:smoke
+```
+
+For packaging or security-sensitive changes, run the relevant validation script as well:
+
+```bash
+npm run security:artifacts
+```
+
+Inkwell is local-first. Pull requests should preserve the project posture: no telemetry, no remote code loading, no silent persistence of document contents, no unsafe Markdown rendering, and no runtime npm dependencies unless the change explains why they are necessary.
 
 ## License
 

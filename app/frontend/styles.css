@@ -987,7 +987,15 @@ body[data-theme="light"] .editor tr:nth-child(even) td {
   font-weight: 700;
 }
 
-body[data-theme="light"] .modal-button.danger {
+.modal-button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #111512;
+  font-weight: 700;
+}
+
+body[data-theme="light"] .modal-button.danger,
+body[data-theme="light"] .modal-button.primary {
   color: #ffffff;
 }
 

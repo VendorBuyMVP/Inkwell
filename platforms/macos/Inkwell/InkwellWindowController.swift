@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CoreServices
 import UniformTypeIdentifiers
 import WebKit
 
@@ -14,6 +15,7 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
     private var allowWindowClose = false
     private var printInfo = NSPrintInfo.shared.copy() as? NSPrintInfo ?? NSPrintInfo()
     private let speechSynthesizer = AVSpeechSynthesizer()
+    private let markdownDefaultExtensions = ["md", "markdown", "mdown"]
 
     convenience init(initialDocumentURL: URL? = nil, diagnosticsURL: URL? = nil) {
         let window = NSWindow(
@@ -59,6 +61,7 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
         currentDocumentURL = url
         window?.representedURL = url
         window?.title = document.name
+        (NSApp.delegate as? AppDelegate)?.noteRecentDocument(url)
         return [
             "name": .string(document.name),
             "content": .string(document.content)
@@ -80,6 +83,7 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
         currentDocumentURL = url
         window?.representedURL = url
         window?.title = url.lastPathComponent
+        (NSApp.delegate as? AppDelegate)?.noteRecentDocument(url)
         return ["name": .string(url.lastPathComponent)]
     }
 
@@ -188,6 +192,45 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
         ]
     }
 
+    func markdownDefaultEditorStatus() -> [String: JSONValue] {
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        let contentTypes = markdownDefaultContentTypes()
+        let defaultTypes = contentTypes.filter { contentType in
+            defaultHandler(for: contentType) == bundleID
+        }
+
+        return [
+            "bundleID": .string(bundleID),
+            "isDefault": .bool(!bundleID.isEmpty && defaultHandler(for: primaryMarkdownContentType()) == bundleID),
+            "contentTypes": .array(contentTypes.map { .string($0) }),
+            "defaultContentTypes": .array(defaultTypes.map { .string($0) })
+        ]
+    }
+
+    func makeMarkdownDefaultEditor() throws -> [String: JSONValue] {
+        guard let bundleID = Bundle.main.bundleIdentifier, !bundleID.isEmpty else {
+            throw InkwellError.invalidPayload("Inkwell bundle identifier is unavailable.")
+        }
+
+        var failedTypes: [String] = []
+        for contentType in markdownDefaultContentTypes() {
+            let status = LSSetDefaultRoleHandlerForContentType(
+                contentType as CFString,
+                LSRolesMask.editor,
+                bundleID as CFString
+            )
+            if status != noErr {
+                failedTypes.append(contentType)
+            }
+        }
+
+        if !failedTypes.isEmpty {
+            throw InkwellError.invalidPayload("Could not make Inkwell the default Markdown editor.")
+        }
+
+        return markdownDefaultEditorStatus()
+    }
+
     func closeFromFrontend() {
         allowWindowClose = true
         window?.close()
@@ -203,6 +246,33 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
             "window.InkwellInvokeCommand && window.InkwellInvokeCommand(\(json));",
             completionHandler: nil
         )
+    }
+
+    private func markdownDefaultContentTypes() -> [String] {
+        var contentTypes: [String] = []
+        for fileExtension in markdownDefaultExtensions {
+            guard let identifier = UTType(filenameExtension: fileExtension)?.identifier else {
+                continue
+            }
+            if !contentTypes.contains(identifier) {
+                contentTypes.append(identifier)
+            }
+        }
+        if !contentTypes.contains(primaryMarkdownContentType()) {
+            contentTypes.insert(primaryMarkdownContentType(), at: 0)
+        }
+        return contentTypes
+    }
+
+    private func primaryMarkdownContentType() -> String {
+        "net.daringfireball.markdown"
+    }
+
+    private func defaultHandler(for contentType: String) -> String {
+        (LSCopyDefaultRoleHandlerForContentType(
+            contentType as CFString,
+            LSRolesMask.editor
+        )?.takeRetainedValue() as String?) ?? ""
     }
 
     func loadFrontendIfNeeded() {

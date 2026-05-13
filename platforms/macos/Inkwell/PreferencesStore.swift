@@ -2,11 +2,69 @@ import Foundation
 
 final class PreferencesStore {
     private let maxPreferencesBytes = 16 * 1024
+    private let maxRecentDocuments = 10
 
     func loadPreferences() throws -> [String: JSONValue] {
+        ["preferences": .object(try loadStoredPreferences())]
+    }
+
+    func savePreferences(payload: [String: JSONValue]?) throws -> [String: JSONValue] {
+        guard let preferences = payload?["preferences"]?.objectValue else {
+            throw InkwellError.invalidPreferences("Preferences must be an object.")
+        }
+
+        var merged = (try? loadStoredPreferences()) ?? defaultPreferences()
+        for (key, value) in preferences {
+            merged[key] = value
+        }
+
+        return try writePreferences(merged)
+    }
+
+    func recentDocumentPaths() throws -> [String] {
+        let preferences = try loadStoredPreferences()
+        return preferences["recentDocuments"]?.arrayValue?
+            .compactMap { $0.stringValue } ?? []
+    }
+
+    func noteRecentDocument(_ url: URL) throws -> [String: JSONValue] {
+        guard url.isFileURL else {
+            return ["preferences": .object(try loadStoredPreferences())]
+        }
+
+        let path = url.standardizedFileURL.path
+        var preferences = try loadStoredPreferences()
+        var recentDocuments = preferences["recentDocuments"]?.arrayValue?
+            .compactMap { $0.stringValue } ?? []
+        recentDocuments.removeAll { $0 == path }
+        recentDocuments.insert(path, at: 0)
+        if recentDocuments.count > maxRecentDocuments {
+            recentDocuments = Array(recentDocuments.prefix(maxRecentDocuments))
+        }
+        preferences["recentDocuments"] = .array(recentDocuments.map { .string($0) })
+        return try writePreferences(preferences)
+    }
+
+    func removeRecentDocument(_ url: URL) throws -> [String: JSONValue] {
+        let path = url.standardizedFileURL.path
+        var preferences = try loadStoredPreferences()
+        let recentDocuments = preferences["recentDocuments"]?.arrayValue?
+            .compactMap { $0.stringValue }
+            .filter { $0 != path } ?? []
+        preferences["recentDocuments"] = .array(recentDocuments.map { .string($0) })
+        return try writePreferences(preferences)
+    }
+
+    func clearRecentDocuments() throws -> [String: JSONValue] {
+        var preferences = try loadStoredPreferences()
+        preferences["recentDocuments"] = .array([])
+        return try writePreferences(preferences)
+    }
+
+    private func loadStoredPreferences() throws -> [String: JSONValue] {
         let url = try preferencesURL(createDirectory: false)
         guard FileManager.default.fileExists(atPath: url.path) else {
-            return ["preferences": .object(defaultPreferences())]
+            return defaultPreferences()
         }
 
         let data = try Data(contentsOf: url)
@@ -15,15 +73,11 @@ final class PreferencesStore {
         }
 
         let decoded = try JSONDecoder().decode(JSONValue.self, from: data)
-        return ["preferences": .object(try sanitizePreferences(decoded))]
+        return try sanitizePreferences(decoded)
     }
 
-    func savePreferences(payload: [String: JSONValue]?) throws -> [String: JSONValue] {
-        guard let preferences = payload?["preferences"] else {
-            throw InkwellError.invalidPreferences("Preferences must be an object.")
-        }
-
-        let sanitized = try sanitizePreferences(preferences)
+    private func writePreferences(_ preferences: [String: JSONValue]) throws -> [String: JSONValue] {
+        let sanitized = try sanitizePreferences(.object(preferences))
         let encodedValue = JSONValue.object(sanitized)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -53,7 +107,7 @@ final class PreferencesStore {
             throw InkwellError.invalidPreferences("Preferences must be an object.")
         }
 
-        let allowedKeys = Set(["version", "shortcuts"])
+        let allowedKeys = Set(["version", "shortcuts", "markdownDefaultPromptChoice", "recentDocuments"])
         if object.keys.contains(where: { !allowedKeys.contains($0) }) {
             throw InkwellError.invalidPreferences("Preferences contain unsupported fields.")
         }
@@ -86,16 +140,49 @@ final class PreferencesStore {
             sanitizedShortcuts[command] = .string(shortcut)
         }
 
-        return [
+        var sanitized: [String: JSONValue] = [
             "version": .number(1),
             "shortcuts": .object(sanitizedShortcuts)
         ]
+
+        if let choice = object["markdownDefaultPromptChoice"]?.stringValue {
+            guard ["accepted", "dismissed"].contains(choice) else {
+                throw InkwellError.invalidPreferences("Markdown default prompt preference is invalid.")
+            }
+            sanitized["markdownDefaultPromptChoice"] = .string(choice)
+        }
+
+        let recentDocuments = object["recentDocuments"]?.arrayValue ?? []
+        if recentDocuments.count > maxRecentDocuments {
+            throw InkwellError.invalidPreferences("Too many recent documents.")
+        }
+
+        var sanitizedRecentDocuments: [JSONValue] = []
+        var seenRecentDocuments: Set<String> = []
+        for recentDocument in recentDocuments {
+            guard let path = recentDocument.stringValue else {
+                throw InkwellError.invalidPreferences("Recent document paths must be text.")
+            }
+            if path.count > 4096 {
+                throw InkwellError.invalidPreferences("Recent document path is too long.")
+            }
+            guard path.hasPrefix("/") else {
+                throw InkwellError.invalidPreferences("Recent document paths must be absolute.")
+            }
+            if seenRecentDocuments.insert(path).inserted {
+                sanitizedRecentDocuments.append(.string(path))
+            }
+        }
+        sanitized["recentDocuments"] = .array(sanitizedRecentDocuments)
+
+        return sanitized
     }
 
     private func defaultPreferences() -> [String: JSONValue] {
         [
             "version": .number(1),
-            "shortcuts": .object([:])
+            "shortcuts": .object([:]),
+            "recentDocuments": .array([])
         ]
     }
 
