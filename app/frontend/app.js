@@ -226,6 +226,7 @@
   const fileName = document.getElementById("fileName");
   const statusText = document.getElementById("statusText");
   const documentStats = document.getElementById("documentStats");
+  const selectionStats = document.getElementById("selectionStats");
   const dirtyState = document.getElementById("dirtyState");
   const zoomState = document.getElementById("zoomState");
   const fileInput = document.getElementById("fileInput");
@@ -499,6 +500,7 @@
   });
 
   document.addEventListener("selectionchange", () => {
+    updateSelectionStats();
     if (!findBar.hidden) {
       hideSelectionToolbar();
       return;
@@ -4819,6 +4821,37 @@
     const words = countRenderedWords(wordText);
     const chars = countRenderedCharacters(characterText);
     documentStats.textContent = words + " words / " + chars + " chars";
+    updateSelectionStats();
+  }
+
+  function updateSelectionStats() {
+    const selectedText = getSelectionStatsText();
+    if (!selectedText) {
+      selectionStats.hidden = true;
+      selectionStats.textContent = "";
+      return;
+    }
+
+    const words = countRenderedWords(selectedText);
+    const chars = countSelectedCharacters(selectedText);
+    selectionStats.textContent = "Selected: " + formatCount(words, "word") + " / " + formatCount(chars, "char");
+    selectionStats.hidden = false;
+  }
+
+  function getSelectionStatsText() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !selectionIsInsideEditor()) {
+      return "";
+    }
+    return selection.toString();
+  }
+
+  function countSelectedCharacters(text) {
+    return String(text || "").length;
+  }
+
+  function formatCount(count, singular) {
+    return count + " " + singular + (count === 1 ? "" : "s");
   }
 
   function getRenderedStatsText() {

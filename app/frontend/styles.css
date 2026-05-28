@@ -684,6 +684,17 @@ body[data-theme="light"] .editor tr:nth-child(even) td {
   gap: 10px;
 }
 
+.status-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.selection-stats {
+  color: var(--page-text);
+}
+
 .zoom-state {
   flex: 0 0 auto;
   color: var(--page-text);

@@ -35,10 +35,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.9.0/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.9.1/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.9.1" date="2026-05-28">
+      <description>
+        <p>Adds live selection statistics in the status bar so highlighted text reports exact word and character counts.</p>
+      </description>
+    </release>
     <release version="0.9.0" date="2026-05-12">
       <description>
         <p>Adds a macOS Open Recent submenu, tracks recently opened local documents, and prompts macOS users to make Inkwell their default Markdown editor without storing document contents.</p>

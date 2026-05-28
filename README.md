@@ -19,7 +19,7 @@ It stores Markdown files locally and does not require accounts, sync, telemetry,
 - macOS spelling suggestions, basic grammar checks, and read-aloud controls
 - Print, page setup, Markdown export, and HTML export commands
 - Zoom controls with a status-bar zoom indicator away from 100%
-- Word and character counts
+- Word and character counts for documents and selected text
 
 ## Requirements
 
