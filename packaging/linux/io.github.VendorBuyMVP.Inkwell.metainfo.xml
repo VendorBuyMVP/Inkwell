@@ -41,7 +41,7 @@
   <releases>
     <release version="0.9.1" date="2026-05-28">
       <description>
-        <p>Adds live selection statistics in the status bar so highlighted text reports exact word and character counts.</p>
+        <p>Adds live selection statistics in the status bar so highlighted text reports exact word and character counts, and improves print output by rendering a sanitized document snapshot instead of printing the editor chrome.</p>
       </description>
     </release>
     <release version="0.9.0" date="2026-05-12">

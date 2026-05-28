@@ -54,6 +54,12 @@ const required = {
   markdownExists: true,
   invokeCommandExists: true,
   bridgeResponseExists: true,
+  printSnapshotExists: true,
+  printSnapshotHasPageRule: true,
+  printSnapshotHasDocumentContent: true,
+  printSnapshotHasAppShell: false,
+  printSnapshotHasScript: false,
+  printSnapshotHasEditableState: false,
 };
 
 for (const [key, expected] of Object.entries(required)) {

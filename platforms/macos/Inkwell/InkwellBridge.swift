@@ -62,8 +62,16 @@ final class InkwellBridge: NSObject, WKScriptMessageHandler {
         case "pageSetup":
             reply(id: request.id, ok: true, data: try windowController.pageSetup(payload: request.payload), error: nil)
         case "printDocument":
-            try windowController.printDocument(payload: request.payload)
-            reply(id: request.id, ok: true, data: [:], error: nil)
+            try windowController.printDocument(payload: request.payload) { [weak self] result in
+                switch result {
+                case .success:
+                    self?.reply(id: request.id, ok: true, data: [:], error: nil)
+                case .failure(InkwellError.cancelled):
+                    self?.reply(id: request.id, ok: false, data: [:], error: "cancelled")
+                case .failure(let error):
+                    self?.reply(id: request.id, ok: false, data: [:], error: error.localizedDescription)
+                }
+            }
         case "exportFile":
             reply(id: request.id, ok: true, data: try windowController.exportFile(payload: request.payload), error: nil)
         case "startSpeaking":

@@ -14,6 +14,7 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
     private var frontendLoadStarted = false
     private var allowWindowClose = false
     private var printInfo = NSPrintInfo.shared.copy() as? NSPrintInfo ?? NSPrintInfo()
+    private var activePrintJob: PrintDocumentJob?
     private let speechSynthesizer = AVSpeechSynthesizer()
     private let markdownDefaultExtensions = ["md", "markdown", "mdown"]
 
@@ -102,10 +103,29 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
         return currentPrintSettings()
     }
 
-    func printDocument(payload: [String: JSONValue]?) throws {
+    func printDocument(payload: [String: JSONValue]?, completion: @escaping (Result<Void, Error>) -> Void) throws {
         applyPrintPayload(payload)
-        let operation = webView.printOperation(with: printInfo)
-        operation.run()
+        guard activePrintJob == nil else {
+            throw InkwellError.invalidPayload("A print operation is already in progress.")
+        }
+        guard let html = payload?["html"]?.stringValue, !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw InkwellError.invalidPayload("Print document is unavailable.")
+        }
+        guard html.utf8.count <= DocumentAccess.maxDocumentBytes else {
+            throw InkwellError.documentTooLarge(html.utf8.count)
+        }
+
+        let title = payload?["title"]?.stringValue ?? window?.title ?? "Inkwell Document"
+        let job = PrintDocumentJob(
+            html: html,
+            title: title,
+            printInfo: printInfo
+        ) { [weak self] result in
+            self?.activePrintJob = nil
+            completion(result)
+        }
+        activePrintJob = job
+        job.start()
     }
 
     func exportFile(payload: [String: JSONValue]?) throws -> [String: JSONValue] {
@@ -449,6 +469,9 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
           const shellStyle = shell ? window.getComputedStyle(shell) : null;
           const topbarStyle = topbar ? window.getComputedStyle(topbar) : null;
           const rect = shell ? shell.getBoundingClientRect() : null;
+          const printHTML = typeof window.InkwellBuildPrintDocument === 'function'
+            ? String(window.InkwellBuildPrintDocument() || '')
+            : '';
           return JSON.stringify({
             location: String(window.location.href),
             readyState: String(document.readyState),
@@ -471,6 +494,12 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
             markdownExists: Boolean(window.InkwellMarkdown),
             invokeCommandExists: typeof window.InkwellInvokeCommand === 'function',
             bridgeResponseExists: typeof window.InkwellBridgeResponse === 'function',
+            printSnapshotExists: typeof window.InkwellBuildPrintDocument === 'function',
+            printSnapshotHasPageRule: printHTML.includes('@page') && printHTML.includes('size: 8.5in 11in'),
+            printSnapshotHasDocumentContent: printHTML.includes('Inkwell macOS smoke test'),
+            printSnapshotHasAppShell: printHTML.includes('app-shell') || printHTML.includes('statusbar') || printHTML.includes('ruler'),
+            printSnapshotHasScript: /<script[\\s>]/i.test(printHTML),
+            printSnapshotHasEditableState: printHTML.includes('contenteditable') || printHTML.includes('is-selected-table-cell'),
             saveMenuShortcut: (document.querySelector('[data-command="save"] .menu-shortcut') || {}).textContent || '',
             diagnosticErrors: window.InkwellDiagnostics ? window.InkwellDiagnostics.errors : []
           });
@@ -786,5 +815,104 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
         alert.addButton(withTitle: "Close")
         alert.runModal()
         NSApp.terminate(nil)
+    }
+}
+
+private final class PrintDocumentJob: NSObject, WKNavigationDelegate {
+    private let html: String
+    private let title: String
+    private let printInfo: NSPrintInfo
+    private let completion: (Result<Void, Error>) -> Void
+    private let webView: WKWebView
+    private var completed = false
+
+    init(
+        html: String,
+        title: String,
+        printInfo: NSPrintInfo,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.html = html
+        self.title = title
+        self.printInfo = PrintDocumentJob.printInfoForSnapshot(printInfo)
+        self.completion = completion
+
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+
+        self.webView = WKWebView(
+            frame: NSRect(origin: .zero, size: self.printInfo.paperSize),
+            configuration: configuration
+        )
+
+        super.init()
+        webView.navigationDelegate = self
+    }
+
+    func start() {
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        DispatchQueue.main.async { [weak self] in
+            self?.runPrintOperation()
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        complete(.failure(error))
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        complete(.failure(error))
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+
+        decisionHandler(url.absoluteString == "about:blank" ? .allow : .cancel)
+    }
+
+    private func runPrintOperation() {
+        let operation = webView.printOperation(with: printInfo)
+        operation.showsPrintPanel = true
+        operation.showsProgressPanel = true
+        operation.jobTitle = title
+
+        if operation.run() {
+            complete(.success(()))
+        } else {
+            complete(.failure(InkwellError.cancelled))
+        }
+    }
+
+    private func complete(_ result: Result<Void, Error>) {
+        guard !completed else {
+            return
+        }
+        completed = true
+        completion(result)
+    }
+
+    private static func printInfoForSnapshot(_ source: NSPrintInfo) -> NSPrintInfo {
+        let info = source.copy() as? NSPrintInfo ?? NSPrintInfo()
+        info.leftMargin = 0
+        info.rightMargin = 0
+        info.topMargin = 0
+        info.bottomMargin = 0
+        info.isHorizontallyCentered = false
+        info.isVerticallyCentered = false
+        info.horizontalPagination = .automatic
+        info.verticalPagination = .automatic
+        return info
     }
 }

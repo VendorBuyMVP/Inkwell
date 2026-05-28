@@ -12,6 +12,7 @@
   const MIN_PAGE_WIDTH_IN = 4;
   const MAX_PAGE_WIDTH_IN = 17;
   const PAGE_EXPANSION_MARGIN_IN = 0.5;
+  const PRINT_VERTICAL_MARGIN_IN = 16 * 4.4 / PX_PER_INCH;
   const MAX_PREFERENCES_SHORTCUTS = 80;
   const STATS_UPDATE_DELAY_MS = 200;
   const ENTER_REPEAT_STALE_MS = 120;
@@ -2034,16 +2035,17 @@
 
   async function printDocument() {
     flushStatsUpdate();
+    const payload = currentPrintPayload();
     if (bridge.native) {
       try {
-        await bridge.send("printDocument", currentPageSetupPayload());
+        await bridge.send("printDocument", payload);
         setStatus("Print dialog opened");
       } catch (error) {
         handleBridgeError(error, "Print failed.");
       }
       return;
     }
-    window.print();
+    printSnapshotInBrowser(payload.html);
   }
 
   async function exportMarkdown() {
@@ -5005,6 +5007,14 @@
     };
   }
 
+  function currentPrintPayload() {
+    return {
+      ...currentPageSetupPayload(),
+      title: state.name || "Inkwell Document",
+      html: buildPrintDocument(),
+    };
+  }
+
   function applyPageSetupResult(result) {
     if (!result || typeof result !== "object") {
       return;
@@ -5058,6 +5068,87 @@
       "<body>\n" +
       bodyMarkup +
       "\n</body>\n</html>\n";
+  }
+
+  function buildPrintDocument() {
+    const clone = editor.cloneNode(true);
+    sanitizeExportHTML(clone);
+    const title = escapeHTML(state.name || "Inkwell Document");
+    const bodyMarkup = serializeExportChildren(clone);
+    const pageWidth = formatPrintInches(documentSettings.pageWidthIn);
+    const pageHeight = formatPrintInches(documentSettings.pageHeightIn);
+    const marginTop = formatPrintInches(PRINT_VERTICAL_MARGIN_IN);
+    const marginBottom = formatPrintInches(PRINT_VERTICAL_MARGIN_IN);
+    const marginLeft = formatPrintInches(documentSettings.marginLeftIn);
+    const marginRight = formatPrintInches(documentSettings.marginRightIn);
+
+    return "<!doctype html>\n" +
+      "<html lang=\"en\">\n" +
+      "<head>\n" +
+      "  <meta charset=\"utf-8\">\n" +
+      "  <title>" + title + "</title>\n" +
+      "  <style>\n" +
+      "    @page { size: " + pageWidth + "in " + pageHeight + "in; margin: " + marginTop + "in " + marginRight + "in " + marginBottom + "in " + marginLeft + "in; }\n" +
+      "    * { box-sizing: border-box; }\n" +
+      "    html, body { margin: 0; padding: 0; background: #ffffff; }\n" +
+      "    body { color: #202521; font: 12pt/1.68 -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, ui-sans-serif, system-ui, sans-serif; }\n" +
+      "    .print-document { width: 100%; overflow-wrap: break-word; }\n" +
+      "    .print-document > :first-child { margin-top: 0; }\n" +
+      "    .print-document > :last-child { margin-bottom: 0; }\n" +
+      "    h1, h2, h3, h4, h5, h6 { margin: 1.1em 0 0.45em; color: #202521; line-height: 1.16; font-weight: 780; break-after: avoid; }\n" +
+      "    h1 { font-size: 3.1em; }\n" +
+      "    h2 { font-size: 2.25em; }\n" +
+      "    h3 { font-size: 1.7em; }\n" +
+      "    h4, h5, h6 { font-size: 1.15em; }\n" +
+      "    p, ul, ol, blockquote, pre { margin: 0.78em 0; }\n" +
+      "    strong, b { font-weight: 800; }\n" +
+      "    em, i { color: #3d3a32; }\n" +
+      "    s, strike, del { color: #66716a; text-decoration-color: #8b5e13; text-decoration-thickness: 0.08em; }\n" +
+      "    ul, ol { padding-left: 1.5em; }\n" +
+      "    li + li { margin-top: 0.28em; }\n" +
+      "    blockquote { margin-left: 0; padding: 0.2em 0 0.2em 1em; border-left: 3px solid #8b5e13; color: #46524b; }\n" +
+      "    code { border-radius: 4px; background: #eef2ef; color: #5c3d0b; padding: 0.13em 0.32em; font-family: SFMono-Regular, Consolas, 'Liberation Mono', monospace; font-size: 0.92em; overflow-wrap: anywhere; word-break: break-word; }\n" +
+      "    pre { overflow: hidden; border: 1px solid #d7ded8; border-radius: 8px; background: #f6f8f6; color: #202521; padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; break-inside: avoid; }\n" +
+      "    pre code { display: block; background: transparent; color: inherit; padding: 0; font-size: 0.92em; white-space: pre-wrap; }\n" +
+      "    a { color: #8b5e13; text-decoration-thickness: 0.08em; text-underline-offset: 0.18em; }\n" +
+      "    hr { border: 0; border-top: 1px solid #d7ded8; margin: 1.4em 0; }\n" +
+      "    table { width: 100%; border-collapse: collapse; margin: 1em 0; table-layout: fixed; break-inside: avoid; }\n" +
+      "    th, td { border: 1px solid #d7ded8; padding: 0.48em 0.62em; vertical-align: top; overflow-wrap: anywhere; }\n" +
+      "    th { background: #eef2ef; color: #3d3a32; font-weight: 760; }\n" +
+      "    tr:nth-child(even) td { background: rgba(0, 0, 0, 0.025); }\n" +
+      "    .task-list-item { list-style: none; }\n" +
+      "    .task-list-item input { margin: 0 0.55em 0 -1.35em; }\n" +
+      "  </style>\n" +
+      "</head>\n" +
+      "<body>\n" +
+      "  <main class=\"print-document\">\n" +
+      bodyMarkup +
+      "\n  </main>\n" +
+      "</body>\n</html>\n";
+  }
+
+  function printSnapshotInBrowser(html) {
+    const frame = document.createElement("iframe");
+    frame.hidden = true;
+    frame.setAttribute("sandbox", "allow-same-origin allow-modals");
+    document.body.append(frame);
+    frame.onload = () => {
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } finally {
+        window.setTimeout(() => frame.remove(), 1000);
+      }
+    };
+    frame.srcdoc = html;
+  }
+
+  function formatPrintInches(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) {
+      return "0";
+    }
+    return number.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
   }
 
   function sanitizeExportHTML(root) {
@@ -5175,6 +5266,8 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
+
+  window.InkwellBuildPrintDocument = buildPrintDocument;
 
   function handleBridgeError(error, fallbackMessage) {
     if (String(error && error.message ? error.message : error) === "cancelled") {
