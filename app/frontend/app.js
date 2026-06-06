@@ -255,11 +255,13 @@
   const findCloseButton = document.getElementById("findCloseButton");
   const findOverlay = document.getElementById("findOverlay");
   const spellingContextMenu = document.getElementById("spellingContextMenu");
+  const editorContextMenu = document.getElementById("editorContextMenu");
   const selectionToolbar = document.getElementById("selectionToolbar");
   const tableContextMenu = document.getElementById("tableContextMenu");
   const menuRoots = Array.from(document.querySelectorAll("[data-menu-root]"));
   const commandButtons = Array.from(document.querySelectorAll("[data-command]"));
   const toolbarButtons = Array.from(document.querySelectorAll("[data-toolbar-action]"));
+  const editorMenuButtons = Array.from(document.querySelectorAll("[data-editor-context-action]"));
   const tableMenuButtons = Array.from(document.querySelectorAll("[data-table-action]"));
 
   const EDITING_ACTIONS = new Set([
@@ -310,6 +312,7 @@
     confirmResolve: null,
     savedRange: null,
     toolbarFrame: null,
+    editorContext: null,
     tableContext: null,
     tableSelection: null,
     spellingContext: null,
@@ -367,6 +370,17 @@
 
   tableContextMenu.addEventListener("mousedown", (event) => {
     event.preventDefault();
+  });
+
+  editorContextMenu.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+  editorContextMenu.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-editor-context-action]");
+    if (!button || button.disabled) {
+      return;
+    }
+    runEditorContextAction(button.dataset.editorContextAction || "");
   });
 
   spellingContextMenu.addEventListener("mousedown", (event) => {
@@ -492,6 +506,9 @@
     if (!tableContextMenu.contains(event.target)) {
       hideTableContextMenu();
     }
+    if (!editorContextMenu.contains(event.target)) {
+      hideEditorContextMenu();
+    }
     if (!spellingContextMenu.contains(event.target)) {
       hideSpellingContextMenu();
     }
@@ -530,6 +547,7 @@
       }
       hideSelectionToolbar();
       hideTableContextMenu();
+      hideEditorContextMenu();
       hideSpellingContextMenu();
       clearTableSelection();
       closeAllMenus();
@@ -586,6 +604,7 @@
     updateLayout();
     scheduleSelectionToolbarUpdate();
     hideTableContextMenu();
+    hideEditorContextMenu();
     hideSpellingContextMenu();
     scheduleFindOverlayRender();
   });
@@ -594,6 +613,7 @@
     syncRulerScrollFromDocument();
     scheduleSelectionToolbarUpdate();
     hideTableContextMenu();
+    hideEditorContextMenu();
     hideSpellingContextMenu();
     scheduleFindOverlayRender();
   });
@@ -1985,6 +2005,11 @@
   }
 
   async function pastePlainTextFromCommand() {
+    return pasteTextFromCommand({ plainText: true });
+  }
+
+  async function pasteTextFromCommand(options = {}) {
+    const plainText = Boolean(options.plainText);
     let text = "";
     try {
       if (bridge.native) {
@@ -1993,26 +2018,30 @@
       } else if (navigator.clipboard && typeof navigator.clipboard.readText === "function") {
         text = await navigator.clipboard.readText();
       } else {
-        setStatus("Plain text paste is unavailable here");
+        setStatus((plainText ? "Plain text paste" : "Paste") + " is unavailable here");
         return false;
       }
     } catch (error) {
-      handleBridgeError(error, "Plain text paste failed.");
+      handleBridgeError(error, (plainText ? "Plain text paste" : "Paste") + " failed.");
       return false;
     }
 
-    withHistoryTransaction("Paste Plain Text", () => {
+    withHistoryTransaction(plainText ? "Paste Plain Text" : "Paste", () => {
       if (hasTableSelection()) {
         pasteTableText(state.tableSelection, text);
         clearTableSelection();
-      } else {
+      } else if (!plainText && looksLikeMarkdown(text)) {
+        insertMarkdownAtSelection(text);
+      } else if (plainText) {
         insertPlainTextWithLineBreaksAtSelection(text);
+      } else {
+        insertPlainTextAtSelection(text);
       }
     }, {
       inputType: "insertFromPaste",
-      mergeKey: "paste:plain",
+      mergeKey: plainText ? "paste:plain" : "paste",
     });
-    markEdited("Pasted plain text");
+    markEdited(plainText ? "Pasted plain text" : "Pasted");
     return true;
   }
 
@@ -3211,6 +3240,7 @@
     const cell = event.target.closest("th, td");
     if (cell && editor.contains(cell)) {
       closeAllMenus();
+      hideEditorContextMenu();
       hideSelectionToolbar();
       hideSpellingContextMenu();
       openTableContextMenu(cell, event.clientX, event.clientY);
@@ -3219,25 +3249,121 @@
 
     hideTableContextMenu();
     clearTableSelection();
-    handleSpellingContextMenu(event);
+    openEditorContextMenu(event);
   }
 
-  function handleSpellingContextMenu(event) {
-    hideSpellingContextMenu();
-    if (!bridge.native) {
-      return;
-    }
-
-    event.preventDefault();
+  function openEditorContextMenu(event) {
     closeAllMenus();
+    hideSpellingContextMenu();
     hideSelectionToolbar();
 
-    const wordContext = getWordContextAtPoint(event.clientX, event.clientY) || getWordContextFromSelection();
-    if (!wordContext) {
+    const selection = window.getSelection();
+    const hasSelection = Boolean(selection && !selection.isCollapsed && selectionIsInsideEditor());
+    if (!hasSelection) {
+      placeCaretFromPoint(event.clientX, event.clientY);
+    }
+
+    state.editorContext = {
+      range: getEditorSelectionRangeBookmark(),
+      wordContext: bridge.native
+        ? getWordContextAtPoint(event.clientX, event.clientY) || getWordContextFromSelection()
+        : null,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
+    updateEditorContextMenuState();
+
+    editorContextMenu.hidden = false;
+    const rect = editorContextMenu.getBoundingClientRect();
+    const left = clamp(event.clientX, 8, window.innerWidth - rect.width - 8);
+    const top = clamp(event.clientY, 8, window.innerHeight - rect.height - 8);
+    editorContextMenu.style.left = left + "px";
+    editorContextMenu.style.top = top + "px";
+  }
+
+  function updateEditorContextMenuState() {
+    const selected = Boolean(getSelectedText());
+    for (const button of editorMenuButtons) {
+      const action = button.dataset.editorContextAction;
+      button.disabled =
+        (action === "cut" && !selected) ||
+        (action === "copy" && !selected) ||
+        (action === "spellingSuggestions" && !state.editorContext?.wordContext);
+    }
+  }
+
+  function runEditorContextAction(action) {
+    const context = state.editorContext;
+    if (action === "spellingSuggestions" && context?.wordContext) {
+      hideEditorContextMenu();
+      requestSpellingSuggestions(context.wordContext, context.clientX, context.clientY);
       return;
     }
 
-    requestSpellingSuggestions(wordContext, event.clientX, event.clientY);
+    restoreEditorContextSelection();
+    hideEditorContextMenu();
+
+    if (action === "undo" || action === "redo" || action === "selectAll") {
+      runMenuAction(action);
+      return;
+    }
+
+    editor.focus();
+    if (action === "cut" || action === "copy") {
+      if (!document.execCommand(action, false)) {
+        setStatus((action === "cut" ? "Cut" : "Copy") + " unavailable here");
+      }
+      return;
+    }
+
+    if (action === "paste") {
+      pasteTextFromCommand();
+      return;
+    }
+
+    if (action === "pastePlainText") {
+      pasteTextFromCommand({ plainText: true });
+    }
+  }
+
+  function getEditorSelectionRangeBookmark() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !selectionIsInsideEditor()) {
+      return null;
+    }
+    return selection.getRangeAt(0).cloneRange();
+  }
+
+  function restoreEditorContextSelection() {
+    const range = state.editorContext?.range;
+    if (!range) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function placeCaretFromPoint(clientX, clientY) {
+    const range = createCaretRangeFromPoint(clientX, clientY);
+    const selection = window.getSelection();
+    if (!range || !selection || !editor.contains(range.startContainer)) {
+      editor.focus();
+      return false;
+    }
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    editor.focus();
+    return true;
+  }
+
+  function hideEditorContextMenu() {
+    editorContextMenu.hidden = true;
+    state.editorContext = null;
   }
 
   function showSpellingSuggestionsForCurrentWord() {

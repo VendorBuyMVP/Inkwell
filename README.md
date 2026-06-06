@@ -15,6 +15,7 @@ It stores Markdown files locally and does not require accounts, sync, telemetry,
 - Dark and light themes, with macOS system appearance support
 - Keyboard shortcuts, including Command-key shortcuts on macOS
 - Markdown formatting for headings, emphasis, lists, quotes, code blocks, tables, task lists, and horizontal rules
+- Standard editor context menu for cut, copy, paste, paste as plain text, select all, and spelling suggestions
 - Basic table editing
 - macOS spelling suggestions, basic grammar checks, and read-aloud controls
 - Print, page setup, Markdown export, and HTML export commands

@@ -210,6 +210,19 @@
 
     <div class="spelling-context-menu" id="spellingContextMenu" role="menu" aria-label="Spelling suggestions" hidden></div>
 
+    <div class="editor-context-menu" id="editorContextMenu" role="menu" aria-label="Editor actions" hidden>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="undo">Undo</button>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="redo">Redo</button>
+      <span class="editor-menu-separator" aria-hidden="true"></span>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="cut">Cut</button>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="copy">Copy</button>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="paste">Paste</button>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="pastePlainText">Paste as Plain Text</button>
+      <span class="editor-menu-separator" aria-hidden="true"></span>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="selectAll">Select All</button>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="spellingSuggestions">Spelling Suggestions</button>
+    </div>
+
     <div class="selection-toolbar" id="selectionToolbar" role="toolbar" aria-label="Markdown formatting" hidden>
       <button class="tool-button strong" type="button" data-toolbar-action="bold" aria-label="Bold" title="Bold">B</button>
       <button class="tool-button emphasis" type="button" data-toolbar-action="italic" aria-label="Italic" title="Italic">I</button>
