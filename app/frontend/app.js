@@ -256,11 +256,12 @@
   const findOverlay = document.getElementById("findOverlay");
   const spellingContextMenu = document.getElementById("spellingContextMenu");
   const editorContextMenu = document.getElementById("editorContextMenu");
-  const selectionToolbar = document.getElementById("selectionToolbar");
+  const formatBar = document.getElementById("formatBar");
   const tableContextMenu = document.getElementById("tableContextMenu");
   const menuRoots = Array.from(document.querySelectorAll("[data-menu-root]"));
   const commandButtons = Array.from(document.querySelectorAll("[data-command]"));
   const toolbarButtons = Array.from(document.querySelectorAll("[data-toolbar-action]"));
+  const formatControlButtons = Array.from(document.querySelectorAll("[data-format-control]"));
   const editorMenuButtons = Array.from(document.querySelectorAll("[data-editor-context-action]"));
   const tableMenuButtons = Array.from(document.querySelectorAll("[data-table-action]"));
 
@@ -310,8 +311,6 @@
     marginDrag: null,
     scrollSyncing: false,
     confirmResolve: null,
-    savedRange: null,
-    toolbarFrame: null,
     editorContext: null,
     tableContext: null,
     tableSelection: null,
@@ -356,15 +355,24 @@
     button.addEventListener("click", () => withMenusClosed(() => invokeCommand(button.dataset.command)));
   }
 
-  selectionToolbar.addEventListener("mousedown", (event) => {
-    event.preventDefault();
+  formatBar.addEventListener("mousedown", (event) => {
+    if (event.target.closest("button")) {
+      event.preventDefault();
+    }
   });
 
   for (const button of toolbarButtons) {
     button.addEventListener("click", () => {
-      restoreSavedSelection();
       runMenuAction(button.dataset.toolbarAction);
-      scheduleSelectionToolbarUpdate();
+    });
+  }
+
+  for (const button of formatControlButtons) {
+    button.addEventListener("click", () => {
+      const value = button.dataset.formatControl || "";
+      if (value.startsWith("align:")) {
+        applySelectedBlockTextAlign(value.slice("align:".length));
+      }
     });
   }
 
@@ -445,9 +453,6 @@
     });
     scheduleStatsUpdate();
     scheduleFindRefresh();
-    if (!paragraphInput) {
-      scheduleSelectionToolbarUpdate();
-    }
   });
 
   editor.addEventListener("paste", (event) => {
@@ -472,7 +477,6 @@
     }, { inputType: "insertFromPaste", mergeKey: "paste" });
     scheduleStatsUpdate();
     scheduleFindRefresh();
-    scheduleSelectionToolbarUpdate();
   });
 
   editor.addEventListener("copy", handleEditorCopy);
@@ -500,9 +504,6 @@
     if (!event.target.closest("[data-menu-root]")) {
       closeAllMenus();
     }
-    if (!editor.contains(event.target) && !selectionToolbar.contains(event.target)) {
-      hideSelectionToolbar();
-    }
     if (!tableContextMenu.contains(event.target)) {
       hideTableContextMenu();
     }
@@ -519,11 +520,7 @@
 
   document.addEventListener("selectionchange", () => {
     updateSelectionStats();
-    if (!findBar.hidden) {
-      hideSelectionToolbar();
-      return;
-    }
-    scheduleSelectionToolbarUpdate();
+    syncFormatControlStates();
     updateSelectedTableCells();
   });
 
@@ -545,7 +542,6 @@
         closeFindBar();
         return;
       }
-      hideSelectionToolbar();
       hideTableContextMenu();
       hideEditorContextMenu();
       hideSpellingContextMenu();
@@ -602,7 +598,6 @@
 
   window.addEventListener("resize", () => {
     updateLayout();
-    scheduleSelectionToolbarUpdate();
     hideTableContextMenu();
     hideEditorContextMenu();
     hideSpellingContextMenu();
@@ -611,7 +606,6 @@
 
   documentScroll.addEventListener("scroll", () => {
     syncRulerScrollFromDocument();
-    scheduleSelectionToolbarUpdate();
     hideTableContextMenu();
     hideEditorContextMenu();
     hideSpellingContextMenu();
@@ -633,6 +627,7 @@
   setupSystemThemeListener();
   loadDocument(DEFAULT_DOCUMENT, "Untitled.md", false, false);
   updateLayout();
+  syncFormatControlStates();
   editor.focus();
 
   confirmCancelButton.addEventListener("click", () => closeConfirm(false));
@@ -1165,7 +1160,6 @@
 
   function openShortcutDialog() {
     closeAllMenus();
-    hideSelectionToolbar();
     hideTableContextMenu();
     renderShortcutFields(state.shortcuts);
     clearShortcutError();
@@ -1285,7 +1279,6 @@
 
   function openFindBar(options = {}) {
     closeAllMenus();
-    hideSelectionToolbar();
     hideTableContextMenu();
     clearTableSelection();
     state.findReplaceVisible = Boolean(options.replace);
@@ -1486,9 +1479,18 @@
   }
 
   function focusFindInput(selectText) {
+    editor.blur();
     findInput.focus();
     if (selectText) {
       findInput.select();
+    }
+    if (document.activeElement !== findInput) {
+      window.requestAnimationFrame(() => {
+        findInput.focus();
+        if (selectText) {
+          findInput.select();
+        }
+      });
     }
   }
 
@@ -1725,12 +1727,10 @@
   function runMenuAction(action) {
     if (action === "undo") {
       undoHistory();
-      scheduleSelectionToolbarUpdate();
       return;
     }
     if (action === "redo") {
       redoHistory();
-      scheduleSelectionToolbarUpdate();
       return;
     }
 
@@ -1829,8 +1829,6 @@
     } else {
       updateChrome();
     }
-
-    scheduleSelectionToolbarUpdate();
   }
 
   function getActionHistoryLabel(action) {
@@ -2337,7 +2335,6 @@
     restoreSelectionBookmark(selectionBookmark);
     updateStatsNow();
     scheduleFindRefresh();
-    scheduleSelectionToolbarUpdate();
   }
 
   function mergeHistoryEntry(entry) {
@@ -2865,7 +2862,6 @@
 
     updateStatsNow();
     scheduleFindRefresh();
-    scheduleSelectionToolbarUpdate();
     return true;
   }
 
@@ -3241,7 +3237,6 @@
     if (cell && editor.contains(cell)) {
       closeAllMenus();
       hideEditorContextMenu();
-      hideSelectionToolbar();
       hideSpellingContextMenu();
       openTableContextMenu(cell, event.clientX, event.clientY);
       return;
@@ -3255,7 +3250,6 @@
   function openEditorContextMenu(event) {
     closeAllMenus();
     hideSpellingContextMenu();
-    hideSelectionToolbar();
 
     const selection = window.getSelection();
     const hasSelection = Boolean(selection && !selection.isCollapsed && selectionIsInsideEditor());
@@ -4034,7 +4028,6 @@
     if (cell !== state.tableSelection.focus) {
       event.preventDefault();
       setTableSelectionRange(state.tableSelection.anchor, cell);
-      hideSelectionToolbar();
       const selection = window.getSelection();
       if (selection) {
         selection.removeAllRanges();
@@ -4568,7 +4561,6 @@
     if (message) {
       setStatus(message);
     }
-    scheduleSelectionToolbarUpdate();
   }
 
   function insertBlocksAtSelection(blocks, caretTarget, replaceSelection) {
@@ -4650,58 +4642,6 @@
     );
   }
 
-  function scheduleSelectionToolbarUpdate() {
-    const selection = window.getSelection();
-    if (selection && selection.isCollapsed && selectionToolbar.hidden && !state.savedRange) {
-      return;
-    }
-
-    if (state.toolbarFrame) {
-      return;
-    }
-
-    state.toolbarFrame = window.requestAnimationFrame(() => {
-      state.toolbarFrame = null;
-      updateSelectionToolbar();
-    });
-  }
-
-  function updateSelectionToolbar() {
-    const range = getSelectionRangeInEditor();
-    if (!range) {
-      hideSelectionToolbar();
-      return;
-    }
-
-    const rect = getRangeRect(range);
-    if (!rect) {
-      hideSelectionToolbar();
-      return;
-    }
-
-    state.savedRange = range.cloneRange();
-    selectionToolbar.hidden = false;
-
-    const toolbarRect = selectionToolbar.getBoundingClientRect();
-    const left = clamp(rect.left + rect.width / 2 - toolbarRect.width / 2, 8, window.innerWidth - toolbarRect.width - 8);
-    let top = rect.top - toolbarRect.height - 12;
-    if (top < 8) {
-      top = rect.bottom + 12;
-    }
-
-    selectionToolbar.style.left = left + "px";
-    selectionToolbar.style.top = clamp(top, 8, window.innerHeight - toolbarRect.height - 8) + "px";
-  }
-
-  function getSelectionRangeInEditor() {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !selectionIsInsideEditor()) {
-      return null;
-    }
-
-    return selection.getRangeAt(0);
-  }
-
   function getRangeRect(range) {
     const rect = range.getBoundingClientRect();
     if (rect.width || rect.height) {
@@ -4710,25 +4650,6 @@
 
     const rects = range.getClientRects();
     return rects.length ? rects[0] : null;
-  }
-
-  function hideSelectionToolbar() {
-    selectionToolbar.hidden = true;
-    state.savedRange = null;
-  }
-
-  function restoreSavedSelection() {
-    if (!state.savedRange) {
-      return;
-    }
-
-    const selection = window.getSelection();
-    if (!selection) {
-      return;
-    }
-
-    selection.removeAllRanges();
-    selection.addRange(state.savedRange);
   }
 
   function selectEditorContents() {
@@ -4803,6 +4724,84 @@
     setStatus("Margins reset");
   }
 
+  function applySelectedBlockTextAlign(align) {
+    const normalized = normalizeTextAlign(align);
+    if (!normalized) {
+      return;
+    }
+
+    const blocks = getTextAlignTargetBlocks();
+    if (!blocks.length) {
+      setStatus("Select a paragraph or heading to align");
+      syncFormatControlStates();
+      return;
+    }
+
+    for (const block of blocks) {
+      if (normalized === "left") {
+        delete block.dataset.textAlign;
+        block.style.textAlign = "";
+      } else {
+        block.dataset.textAlign = normalized;
+        block.style.textAlign = normalized;
+      }
+    }
+
+    syncFormatControlStates();
+    setStatus("Block alignment set for print and HTML export");
+  }
+
+  function getTextAlignTargetBlocks() {
+    const selection = window.getSelection();
+    if (!selection || !selectionIsInsideEditor()) {
+      return [];
+    }
+
+    if (selection.rangeCount && !selection.isCollapsed) {
+      return uniqueElements(getSelectedBlocks(selection.getRangeAt(0))).filter(isTextAlignBlock);
+    }
+
+    return uniqueElements([getActiveBlock()]).filter(isTextAlignBlock);
+  }
+
+  function isTextAlignBlock(block) {
+    if (!block || block.nodeType !== Node.ELEMENT_NODE || block.parentElement !== editor) {
+      return false;
+    }
+    const tag = block.tagName.toLowerCase();
+    return tag === "p" || tag === "blockquote" || tag === "ul" || tag === "ol" || /^h[1-6]$/.test(tag);
+  }
+
+  function normalizeTextAlign(value) {
+    const align = String(value || "").trim().toLowerCase();
+    return ["left", "center", "right", "justify"].includes(align) ? align : "";
+  }
+
+  function getBlockTextAlign(block) {
+    if (!block || block.nodeType !== Node.ELEMENT_NODE) {
+      return "left";
+    }
+    return normalizeTextAlign(block.dataset.textAlign || block.style.textAlign) || "left";
+  }
+
+  function getActiveTextAlign() {
+    const blocks = getTextAlignTargetBlocks();
+    if (!blocks.length) {
+      return "left";
+    }
+    const first = getBlockTextAlign(blocks[0]);
+    return blocks.every((block) => getBlockTextAlign(block) === first) ? first : "";
+  }
+
+  function syncFormatControlStates() {
+    const activeAlign = getActiveTextAlign();
+    for (const button of formatControlButtons) {
+      const value = button.dataset.formatControl || "";
+      const pressed = value === "align:" + activeAlign;
+      button.setAttribute("aria-pressed", pressed ? "true" : "false");
+    }
+  }
+
   function zoomBy(delta) {
     setZoom(documentSettings.zoom + delta);
   }
@@ -4832,6 +4831,7 @@
     document.documentElement.style.setProperty("--page-margin-right-px", marginRightPx + "px");
     document.documentElement.style.setProperty("--editor-font-size-px", fontSizePx + "px");
     document.body.dataset.theme = documentSettings.theme;
+    syncFormatControlStates();
 
     ruler.hidden = !documentSettings.rulerVisible;
     document.body.classList.toggle("ruler-hidden", !documentSettings.rulerVisible);
@@ -5373,6 +5373,11 @@
       if (align === "left" || align === "center" || align === "right") {
         attributes.push(["style", "text-align: " + align]);
       }
+    } else if (isExportTextAlignBlock(tag)) {
+      const align = normalizeTextAlign(element.dataset.textAlign || element.style.textAlign);
+      if (align && align !== "left") {
+        attributes.push(["style", "text-align: " + align]);
+      }
     } else if (tag === "input" && element.getAttribute("type") === "checkbox") {
       attributes.push(["type", "checkbox"], ["disabled", ""]);
       if (element.checked) {
@@ -5385,6 +5390,10 @@
       .join("");
   }
 
+  function isExportTextAlignBlock(tag) {
+    return tag === "p" || tag === "blockquote" || tag === "ul" || tag === "ol" || /^h[1-6]$/.test(tag);
+  }
+
   function escapeHTML(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -5394,6 +5403,8 @@
   }
 
   window.InkwellBuildPrintDocument = buildPrintDocument;
+  window.InkwellTestHooks = window.InkwellTestHooks || {};
+  window.InkwellTestHooks.createPrintSnapshotHTML = buildPrintDocument;
 
   function handleBridgeError(error, fallbackMessage) {
     if (String(error && error.message ? error.message : error) === "cancelled") {

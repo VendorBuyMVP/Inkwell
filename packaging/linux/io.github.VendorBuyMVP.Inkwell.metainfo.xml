@@ -35,10 +35,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.9.2/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.10.0/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.10.0" date="2026-06-08">
+      <description>
+        <p>Adds a persistent formatting bar and selected-block alignment controls backed by open-source editor and icon patterns, while keeping Markdown save and export behavior clean.</p>
+      </description>
+    </release>
     <release version="0.9.2" date="2026-06-06">
       <description>
         <p>Adds a standard editor right-click menu for undo, redo, cut, copy, paste, paste as plain text, select all, and spelling suggestions, and fixes context-menu Paste so it inserts clipboard text directly.</p>

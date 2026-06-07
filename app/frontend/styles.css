@@ -77,22 +77,22 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 28px 24px minmax(0, 1fr) 26px;
+  grid-template-rows: 28px 34px 24px minmax(0, 1fr) 26px;
   height: 100%;
   min-width: 320px;
   background: var(--app-bg);
 }
 
 body.ruler-hidden .app-shell {
-  grid-template-rows: 28px minmax(0, 1fr) 26px;
+  grid-template-rows: 28px 34px minmax(0, 1fr) 26px;
 }
 
 body.native-shell .app-shell {
-  grid-template-rows: 24px minmax(0, 1fr) 26px;
+  grid-template-rows: 34px 24px minmax(0, 1fr) 26px;
 }
 
 body.native-shell.ruler-hidden .app-shell {
-  grid-template-rows: minmax(0, 1fr) 26px;
+  grid-template-rows: 34px minmax(0, 1fr) 26px;
 }
 
 .topbar {
@@ -110,6 +110,48 @@ body.native-shell.ruler-hidden .app-shell {
 
 body.native-shell .topbar {
   display: none;
+}
+
+.formatbar {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--chrome-bg);
+  padding: 3px 8px;
+}
+
+.formatbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  padding-right: 7px;
+  border-right: 1px solid var(--border);
+}
+
+.formatbar-group:last-child {
+  border-right: 0;
+}
+
+.align-controls {
+  gap: 5px;
+}
+
+.icon-button {
+  min-width: 28px;
+  padding: 0;
+}
+
+.tool-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  pointer-events: none;
 }
 
 .topbar-left {
@@ -727,39 +769,6 @@ body[data-theme="light"] .editor tr:nth-child(even) td {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-.selection-toolbar {
-  position: fixed;
-  z-index: 30;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 3px;
-  max-width: min(92vw, 620px);
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--menu-bg);
-  color: var(--page-text);
-  box-shadow: var(--shadow);
-}
-
-.selection-toolbar::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -7px;
-  width: 12px;
-  height: 12px;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background: var(--menu-bg);
-  transform: translateX(-50%) rotate(45deg);
-}
-
-.selection-toolbar[hidden] {
-  display: none;
-}
-
 .tool-button {
   position: relative;
   z-index: 1;
@@ -782,6 +791,11 @@ body[data-theme="light"] .editor tr:nth-child(even) td {
 .tool-button:hover,
 .tool-button:focus-visible {
   background: var(--menu-hover);
+}
+
+.tool-button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .tool-button.strong {
@@ -1077,10 +1091,10 @@ body[data-theme="light"] .modal-button.primary {
 
 @media print {
   .topbar,
+  .formatbar,
   .findbar,
   .ruler,
   .statusbar,
-  .selection-toolbar,
   .table-context-menu,
   .spelling-context-menu,
   .modal-backdrop {

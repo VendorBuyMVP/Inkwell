@@ -53,6 +53,8 @@ cp "$ROOT_DIR/app/frontend/index.html" "$FRONTEND_DEST/index.html"
 cp "$ROOT_DIR/app/frontend/app.js" "$FRONTEND_DEST/app.js"
 cp "$ROOT_DIR/app/frontend/markdown.js" "$FRONTEND_DEST/markdown.js"
 cp "$ROOT_DIR/app/frontend/styles.css" "$FRONTEND_DEST/styles.css"
+mkdir -p "$FRONTEND_DEST/vendor/lucide"
+cp "$ROOT_DIR/app/frontend/vendor/lucide/LICENSE" "$FRONTEND_DEST/vendor/lucide/LICENSE"
 
 ICONSET="$BUILD_DIR/Inkwell.iconset"
 rm -rf "$ICONSET"

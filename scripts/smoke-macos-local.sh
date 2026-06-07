@@ -25,6 +25,7 @@ test -f "$APP_PATH/Contents/Resources/frontend/index.html"
 test -f "$APP_PATH/Contents/Resources/frontend/app.js"
 test -f "$APP_PATH/Contents/Resources/frontend/markdown.js"
 test -f "$APP_PATH/Contents/Resources/frontend/styles.css"
+test -f "$APP_PATH/Contents/Resources/frontend/vendor/lucide/LICENSE"
 test -f "$APP_PATH/Contents/Resources/Inkwell.icns"
 
 plutil -extract CFBundleIdentifier raw -o - "$APP_PATH/Contents/Info.plist" | grep -qx 'io.github.VendorBuyMVP.Inkwell'
