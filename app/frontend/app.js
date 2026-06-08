@@ -254,9 +254,13 @@
   const findNextButton = document.getElementById("findNextButton");
   const findCloseButton = document.getElementById("findCloseButton");
   const findOverlay = document.getElementById("findOverlay");
+  const formatSelectionOverlay = document.getElementById("formatSelectionOverlay");
   const spellingContextMenu = document.getElementById("spellingContextMenu");
   const editorContextMenu = document.getElementById("editorContextMenu");
   const formatBar = document.getElementById("formatBar");
+  const fontSizeControl = document.getElementById("fontSizeControl");
+  const lineHeightControl = document.getElementById("lineHeightControl");
+  const paragraphSpacingControl = document.getElementById("paragraphSpacingControl");
   const tableContextMenu = document.getElementById("tableContextMenu");
   const menuRoots = Array.from(document.querySelectorAll("[data-menu-root]"));
   const commandButtons = Array.from(document.querySelectorAll("[data-command]"));
@@ -311,6 +315,9 @@
     marginDrag: null,
     scrollSyncing: false,
     confirmResolve: null,
+    formatSelectionBookmark: null,
+    formatSelectionOverlayFrame: null,
+    lastEditorSelectionBookmark: null,
     editorContext: null,
     tableContext: null,
     tableSelection: null,
@@ -361,8 +368,20 @@
     }
   });
 
+  for (const control of [fontSizeControl, lineHeightControl, paragraphSpacingControl]) {
+    control.addEventListener("focus", () => {
+      state.formatSelectionBookmark = state.lastEditorSelectionBookmark || createSelectionBookmark();
+      scheduleFormatSelectionOverlayRender();
+    });
+  }
+
+  bindRichFormatInput(fontSizeControl, "fontSize");
+  bindRichFormatInput(lineHeightControl, "lineHeight");
+  bindRichFormatInput(paragraphSpacingControl, "paragraphSpacing");
+
   for (const button of toolbarButtons) {
     button.addEventListener("click", () => {
+      restoreFormatSelectionForCommand();
       runMenuAction(button.dataset.toolbarAction);
     });
   }
@@ -516,12 +535,22 @@
     if (!editor.contains(event.target) && !tableContextMenu.contains(event.target)) {
       clearTableSelection();
     }
+    if (!editor.contains(event.target) && !formatBar.contains(event.target)) {
+      clearFormatSelection();
+    }
   });
 
   document.addEventListener("selectionchange", () => {
+    if (selectionIsInsideEditor()) {
+      state.lastEditorSelectionBookmark = createSelectionBookmark();
+      if (!formatBar.contains(document.activeElement)) {
+        hideFormatSelectionOverlay();
+      }
+    }
     updateSelectionStats();
     syncFormatControlStates();
     updateSelectedTableCells();
+    scheduleFormatSelectionOverlayRender();
   });
 
   document.addEventListener("keydown", (event) => {
@@ -598,6 +627,7 @@
 
   window.addEventListener("resize", () => {
     updateLayout();
+    scheduleFormatSelectionOverlayRender();
     hideTableContextMenu();
     hideEditorContextMenu();
     hideSpellingContextMenu();
@@ -606,6 +636,7 @@
 
   documentScroll.addEventListener("scroll", () => {
     syncRulerScrollFromDocument();
+    scheduleFormatSelectionOverlayRender();
     hideTableContextMenu();
     hideEditorContextMenu();
     hideSpellingContextMenu();
@@ -2432,10 +2463,33 @@
       return null;
     }
 
+    return createSelectionBookmarkFromPoints(
+      selection.anchorNode,
+      selection.anchorOffset,
+      selection.focusNode,
+      selection.focusOffset,
+      selection.isCollapsed
+    );
+  }
+
+  function createSelectionBookmarkFromRange(range) {
+    if (!range || !editor.contains(range.startContainer) || !editor.contains(range.endContainer)) {
+      return null;
+    }
+    return createSelectionBookmarkFromPoints(
+      range.startContainer,
+      range.startOffset,
+      range.endContainer,
+      range.endOffset,
+      range.collapsed
+    );
+  }
+
+  function createSelectionBookmarkFromPoints(anchorNode, anchorOffset, focusNode, focusOffset, isCollapsed) {
     return {
-      anchor: createSelectionPointBookmark(selection.anchorNode, selection.anchorOffset),
-      focus: createSelectionPointBookmark(selection.focusNode, selection.focusOffset),
-      isCollapsed: selection.isCollapsed,
+      anchor: createSelectionPointBookmark(anchorNode, anchorOffset),
+      focus: createSelectionPointBookmark(focusNode, focusOffset),
+      isCollapsed: Boolean(isCollapsed),
     };
   }
 
@@ -2462,18 +2516,14 @@
       return false;
     }
 
-    const anchor = resolveSelectionPointBookmark(bookmark.anchor);
-    const focus = resolveSelectionPointBookmark(bookmark.focus);
-    if (!anchor || !focus) {
+    const range = resolveSelectionBookmarkRange(bookmark);
+    if (!range) {
       placeCaretAtEnd(editor);
       editor.focus();
       return false;
     }
 
-    const range = document.createRange();
     try {
-      range.setStart(anchor.node, anchor.offset);
-      range.setEnd(focus.node, focus.offset);
       selection.removeAllRanges();
       selection.addRange(range);
     } catch (_error) {
@@ -2484,6 +2534,27 @@
 
     editor.focus();
     return true;
+  }
+
+  function resolveSelectionBookmarkRange(bookmark) {
+    if (!bookmark || !bookmark.anchor || !bookmark.focus) {
+      return null;
+    }
+
+    const anchor = resolveSelectionPointBookmark(bookmark.anchor);
+    const focus = resolveSelectionPointBookmark(bookmark.focus);
+    if (!anchor || !focus) {
+      return null;
+    }
+
+    const range = document.createRange();
+    try {
+      range.setStart(anchor.node, anchor.offset);
+      range.setEnd(focus.node, focus.offset);
+    } catch (_error) {
+      return null;
+    }
+    return range;
   }
 
   function resolveSelectionPointBookmark(point) {
@@ -2520,6 +2591,13 @@
     }
 
     const tag = node.tagName.toLowerCase();
+    if (isRichMarkdownBlockTag(tag) && blockHasRichMarkdownStyle(node)) {
+      const htmlTag = tag === "div" ? "p" : tag;
+      return "<" + htmlTag + " style=\"" + escapeHTML(serializeRichMarkdownBlockStyle(node)) + "\">" +
+        serializeInlineHTML(node) +
+        "</" + htmlTag + ">";
+    }
+
     if (/^h[1-6]$/.test(tag)) {
       const text = serializeInline(node).trim();
       return "#".repeat(Number(tag[1])) + (text ? " " + text : "");
@@ -2595,6 +2673,11 @@
         if (tag === "code") {
           return "`" + node.textContent.replace(/`/g, "\\`") + "`";
         }
+        if (tag === "span" && node.dataset.fontSize) {
+          return "<span style=\"" + escapeHTML(serializeRichMarkdownInlineStyle(node)) + "\">" +
+            serializeInlineHTML(node) +
+            "</span>";
+        }
         if (tag === "table") {
           return "\n\n" + serializeTable(node) + "\n\n";
         }
@@ -2613,6 +2696,79 @@
         return serializeInline(node);
       })
       .join("");
+  }
+
+  function serializeInlineHTML(parent) {
+    return Array.from(parent.childNodes)
+      .map((node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          return escapeHTML(node.textContent || "");
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          return "";
+        }
+
+        const tag = node.tagName.toLowerCase();
+        if (tag === "strong" || tag === "b") {
+          return "<strong>" + serializeInlineHTML(node) + "</strong>";
+        }
+        if (tag === "em" || tag === "i") {
+          return "<em>" + serializeInlineHTML(node) + "</em>";
+        }
+        if (tag === "s" || tag === "strike" || tag === "del") {
+          return "<s>" + serializeInlineHTML(node) + "</s>";
+        }
+        if (tag === "code") {
+          return "<code>" + escapeHTML(node.textContent || "") + "</code>";
+        }
+        if (tag === "a") {
+          const href = window.InkwellMarkdown.sanitizeHref(node.getAttribute("href"));
+          return href
+            ? "<a href=\"" + escapeHTML(href) + "\">" + serializeInlineHTML(node) + "</a>"
+            : serializeInlineHTML(node);
+        }
+        if (tag === "br") {
+          return "<br>";
+        }
+        if (tag === "span" && node.dataset.fontSize) {
+          return "<span style=\"" + escapeHTML(serializeRichMarkdownInlineStyle(node)) + "\">" +
+            serializeInlineHTML(node) +
+            "</span>";
+        }
+        return serializeInlineHTML(node);
+      })
+      .join("");
+  }
+
+  function isRichMarkdownBlockTag(tag) {
+    return tag === "p" || tag === "div" || tag === "blockquote" || /^h[1-6]$/.test(tag);
+  }
+
+  function blockHasRichMarkdownStyle(block) {
+    return Boolean(block.dataset.lineHeight || block.dataset.paragraphSpacing || block.dataset.textAlign);
+  }
+
+  function serializeRichMarkdownInlineStyle(element) {
+    const fontSize = normalizeFontSizePx(element.dataset.fontSize || element.style.fontSize.replace(/px$/, ""));
+    return fontSize ? "font-size: " + fontSize + "px" : "";
+  }
+
+  function serializeRichMarkdownBlockStyle(block) {
+    const declarations = [];
+    const lineHeight = normalizeLineHeight(block.dataset.lineHeight || block.style.lineHeight);
+    const paragraphSpacing = normalizeParagraphSpacingEm(block.dataset.paragraphSpacing || "");
+    const align = normalizeTextAlign(block.dataset.textAlign || block.style.textAlign);
+    if (lineHeight) {
+      declarations.push("line-height: " + lineHeight);
+    }
+    if (paragraphSpacing !== null && paragraphSpacing !== "") {
+      declarations.push("margin-top: " + paragraphSpacing + "em");
+      declarations.push("margin-bottom: " + paragraphSpacing + "em");
+    }
+    if (align && align !== "left") {
+      declarations.push("text-align: " + align);
+    }
+    return declarations.join("; ");
   }
 
   function hasSerializedBlockChildren(node) {
@@ -4652,6 +4808,62 @@
     return rects.length ? rects[0] : null;
   }
 
+  function scheduleFormatSelectionOverlayRender() {
+    if (state.formatSelectionOverlayFrame) {
+      return;
+    }
+
+    state.formatSelectionOverlayFrame = window.requestAnimationFrame(() => {
+      state.formatSelectionOverlayFrame = null;
+      renderFormatSelectionOverlay();
+    });
+  }
+
+  function renderFormatSelectionOverlay() {
+    if (!formatBar.contains(document.activeElement) || !state.formatSelectionBookmark) {
+      hideFormatSelectionOverlay();
+      return;
+    }
+
+    const range = resolveSelectionBookmarkRange(state.formatSelectionBookmark);
+    if (!range || range.collapsed) {
+      hideFormatSelectionOverlay();
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (const rect of Array.from(range.getClientRects())) {
+      if (rect.width <= 0 || rect.height <= 0) {
+        continue;
+      }
+      const marker = document.createElement("span");
+      marker.className = "format-selection-highlight";
+      marker.style.left = rect.left + "px";
+      marker.style.top = rect.top + "px";
+      marker.style.width = rect.width + "px";
+      marker.style.height = rect.height + "px";
+      fragment.append(marker);
+    }
+
+    if (!fragment.childNodes.length) {
+      hideFormatSelectionOverlay();
+      return;
+    }
+
+    formatSelectionOverlay.replaceChildren(fragment);
+    formatSelectionOverlay.hidden = false;
+  }
+
+  function hideFormatSelectionOverlay() {
+    formatSelectionOverlay.hidden = true;
+    formatSelectionOverlay.replaceChildren();
+  }
+
+  function clearFormatSelection() {
+    state.formatSelectionBookmark = null;
+    hideFormatSelectionOverlay();
+  }
+
   function selectEditorContents() {
     const selection = window.getSelection();
     if (!selection) {
@@ -4724,41 +4936,238 @@
     setStatus("Margins reset");
   }
 
+  function bindRichFormatInput(control, type) {
+    const apply = () => {
+      state.formatSelectionBookmark = state.formatSelectionBookmark || state.lastEditorSelectionBookmark || createSelectionBookmark();
+      if (type === "fontSize") {
+        applySelectedFontSize(control.value);
+      } else if (type === "lineHeight") {
+        applySelectedBlockLineHeight(control.value);
+      } else if (type === "paragraphSpacing") {
+        applySelectedBlockParagraphSpacing(control.value);
+      }
+      scheduleFormatSelectionOverlayRender();
+    };
+
+    control.addEventListener("keydown", (event) => {
+      if (!isNumericControlStepKey(event)) {
+        return;
+      }
+      event.preventDefault();
+      stepNumericFormatControl(control, event.key === "ArrowUp" ? 1 : -1);
+      apply();
+    });
+    control.addEventListener("input", apply);
+    control.addEventListener("change", apply);
+  }
+
+  function isNumericControlStepKey(event) {
+    return (
+      (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey
+    );
+  }
+
+  function stepNumericFormatControl(control, direction) {
+    const step = readNumericControlAttribute(control, "step", 1);
+    const min = readNumericControlAttribute(control, "min", Number.NEGATIVE_INFINITY);
+    const max = readNumericControlAttribute(control, "max", Number.POSITIVE_INFINITY);
+    const current = Number(control.value);
+    const fallback = readNumericControlDefault(control, min);
+    const precision = getDecimalPrecision(step);
+    const next = clamp(Number.isFinite(current) ? current + (direction * step) : fallback, min, max);
+    control.value = formatSteppedControlValue(next, precision);
+  }
+
+  function readNumericControlAttribute(control, name, fallback) {
+    const raw = control.getAttribute(name);
+    const value = Number(raw);
+    return raw !== null && raw !== "" && Number.isFinite(value) ? value : fallback;
+  }
+
+  function readNumericControlDefault(control, min) {
+    const value = Number(control.defaultValue || control.getAttribute("value"));
+    if (Number.isFinite(value)) {
+      return value;
+    }
+    return Number.isFinite(min) ? min : 0;
+  }
+
+  function getDecimalPrecision(value) {
+    const text = String(value);
+    const decimalIndex = text.indexOf(".");
+    return decimalIndex === -1 ? 0 : text.length - decimalIndex - 1;
+  }
+
+  function formatSteppedControlValue(value, precision) {
+    const factor = 10 ** precision;
+    const rounded = Math.round(value * factor) / factor;
+    return precision > 0
+      ? rounded.toFixed(precision).replace(/\.?0+$/, "")
+      : String(Math.round(rounded));
+  }
+
+  function restoreFormatSelectionForCommand() {
+    const bookmark = state.formatSelectionBookmark || state.lastEditorSelectionBookmark;
+    if (bookmark) {
+      restoreSelectionBookmark(bookmark);
+      hideFormatSelectionOverlay();
+    }
+  }
+
+  function getFormatTargetRange() {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount && selectionIsInsideEditor()) {
+      return selection.getRangeAt(0).cloneRange();
+    }
+    return resolveSelectionBookmarkRange(state.formatSelectionBookmark || state.lastEditorSelectionBookmark);
+  }
+
+  function applySelectedFontSize(value) {
+    const fontSize = normalizeFontSizePx(value);
+    if (!fontSize) {
+      syncFormatControlStates();
+      return;
+    }
+
+    const range = getFormatTargetRange();
+    if (!range || range.collapsed) {
+      setStatus("Select text to size");
+      syncFormatControlStates();
+      scheduleFormatSelectionOverlayRender();
+      return;
+    }
+
+    withHistoryTransaction("Font Size", () => {
+      const span = document.createElement("span");
+      span.dataset.fontSize = fontSize;
+      span.style.fontSize = fontSize + "px";
+      const fragment = range.extractContents();
+      unwrapFontSizeSpans(fragment);
+      span.append(fragment);
+      range.insertNode(span);
+      collapseFontSizeAncestors(span);
+      normalizeRichStyleSpans();
+      if (span.isConnected) {
+        const nextRange = document.createRange();
+        nextRange.selectNodeContents(span);
+        state.formatSelectionBookmark = createSelectionBookmarkFromRange(nextRange);
+      }
+    }, {
+      inputType: "formatFontSize",
+      mergeKey: "format:font-size",
+    });
+    markEdited("Font size " + fontSize + "px");
+    syncFormatControlStates();
+    scheduleFormatSelectionOverlayRender();
+  }
+
+  function applySelectedBlockLineHeight(value) {
+    const lineHeight = normalizeLineHeight(value);
+    if (!lineHeight) {
+      syncFormatControlStates();
+      return;
+    }
+
+    applySelectedBlockRichStyle({
+      label: "Line Spacing",
+      status: "Line spacing " + lineHeight + "x",
+      inputType: "formatLineHeight",
+      mergeKey: "format:line-height",
+      apply(block) {
+        block.dataset.lineHeight = lineHeight;
+        block.style.lineHeight = lineHeight;
+      },
+    });
+  }
+
+  function applySelectedBlockParagraphSpacing(value) {
+    const spacing = normalizeParagraphSpacingEm(value);
+    if (spacing === null) {
+      syncFormatControlStates();
+      return;
+    }
+
+    applySelectedBlockRichStyle({
+      label: "Paragraph Spacing",
+      status: "Paragraph spacing " + spacing + "em",
+      inputType: "formatParagraphSpacing",
+      mergeKey: "format:paragraph-spacing",
+      apply(block) {
+        block.dataset.paragraphSpacing = spacing;
+        block.style.marginTop = spacing + "em";
+        block.style.marginBottom = spacing + "em";
+      },
+    });
+  }
+
+  function applySelectedBlockRichStyle(options) {
+    const blocks = getRichBlockTargets();
+    if (!blocks.length) {
+      setStatus("Select a paragraph or heading to format");
+      syncFormatControlStates();
+      scheduleFormatSelectionOverlayRender();
+      return;
+    }
+
+    withHistoryTransaction(options.label, () => {
+      for (const block of blocks) {
+        options.apply(block);
+      }
+    }, {
+      inputType: options.inputType,
+      mergeKey: options.mergeKey,
+    });
+    markEdited(options.status);
+    state.formatSelectionBookmark = state.formatSelectionBookmark || state.lastEditorSelectionBookmark || createSelectionBookmark();
+    syncFormatControlStates();
+    scheduleFormatSelectionOverlayRender();
+  }
+
   function applySelectedBlockTextAlign(align) {
     const normalized = normalizeTextAlign(align);
     if (!normalized) {
       return;
     }
 
-    const blocks = getTextAlignTargetBlocks();
+    const blocks = getRichBlockTargets();
     if (!blocks.length) {
       setStatus("Select a paragraph or heading to align");
       syncFormatControlStates();
+      scheduleFormatSelectionOverlayRender();
       return;
     }
 
-    for (const block of blocks) {
-      if (normalized === "left") {
-        delete block.dataset.textAlign;
-        block.style.textAlign = "";
-      } else {
-        block.dataset.textAlign = normalized;
-        block.style.textAlign = normalized;
+    withHistoryTransaction("Text Align", () => {
+      for (const block of blocks) {
+        if (normalized === "left") {
+          delete block.dataset.textAlign;
+          block.style.textAlign = "";
+        } else {
+          block.dataset.textAlign = normalized;
+          block.style.textAlign = normalized;
+        }
       }
-    }
+    }, {
+      inputType: "formatTextAlign",
+      mergeKey: "format:text-align",
+    });
 
+    markEdited("Block alignment set for print and rich Markdown");
     syncFormatControlStates();
-    setStatus("Block alignment set for print and HTML export");
+    scheduleFormatSelectionOverlayRender();
   }
 
-  function getTextAlignTargetBlocks() {
-    const selection = window.getSelection();
-    if (!selection || !selectionIsInsideEditor()) {
+  function getRichBlockTargets() {
+    const range = getFormatTargetRange();
+    if (!range) {
       return [];
     }
 
-    if (selection.rangeCount && !selection.isCollapsed) {
-      return uniqueElements(getSelectedBlocks(selection.getRangeAt(0))).filter(isTextAlignBlock);
+    if (!range.collapsed) {
+      return uniqueElements(getSelectedBlocks(range)).filter(isTextAlignBlock);
     }
 
     return uniqueElements([getActiveBlock()]).filter(isTextAlignBlock);
@@ -4773,8 +5182,40 @@
   }
 
   function normalizeTextAlign(value) {
-    const align = String(value || "").trim().toLowerCase();
-    return ["left", "center", "right", "justify"].includes(align) ? align : "";
+    return getFormattingEngine().normalizeTextAlign(value);
+  }
+
+  function normalizeFontSizePx(value) {
+    return getFormattingEngine().normalizeFontSizePx(value);
+  }
+
+  function normalizeLineHeight(value) {
+    return getFormattingEngine().normalizeLineHeight(value);
+  }
+
+  function normalizeParagraphSpacingEm(value) {
+    return getFormattingEngine().normalizeParagraphSpacingEm(value);
+  }
+
+  function getFormattingEngine() {
+    return window.InkwellEditorEngine || {
+      normalizeTextAlign(value) {
+        const align = String(value || "").trim().toLowerCase();
+        return ["left", "center", "right", "justify"].includes(align) ? align : "";
+      },
+      normalizeFontSizePx(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? String(clamp(Math.round(number), 5, 72)) : null;
+      },
+      normalizeLineHeight(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? String(Math.round(clamp(number, 0.8, 3) * 100) / 100) : null;
+      },
+      normalizeParagraphSpacingEm(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? String(Math.round(clamp(number, 0, 3) * 100) / 100) : null;
+      },
+    };
   }
 
   function getBlockTextAlign(block) {
@@ -4785,7 +5226,7 @@
   }
 
   function getActiveTextAlign() {
-    const blocks = getTextAlignTargetBlocks();
+    const blocks = getRichBlockTargets();
     if (!blocks.length) {
       return "left";
     }
@@ -4800,6 +5241,95 @@
       const pressed = value === "align:" + activeAlign;
       button.setAttribute("aria-pressed", pressed ? "true" : "false");
     }
+
+    const activeSpan = getActiveRichStyleSpan();
+    const activeBlock = getRichBlockTargets()[0];
+    if (document.activeElement !== fontSizeControl) {
+      fontSizeControl.value = activeSpan?.dataset.fontSize || "16";
+    }
+    if (document.activeElement !== lineHeightControl) {
+      lineHeightControl.value = activeBlock?.dataset.lineHeight || "1.68";
+    }
+    if (document.activeElement !== paragraphSpacingControl) {
+      paragraphSpacingControl.value = activeBlock?.dataset.paragraphSpacing || "0.78";
+    }
+  }
+
+  function getActiveRichStyleSpan() {
+    const selection = window.getSelection();
+    if (!selection || !selection.anchorNode || !editor.contains(selection.anchorNode)) {
+      return null;
+    }
+    const element = selection.anchorNode.nodeType === Node.ELEMENT_NODE
+      ? selection.anchorNode
+      : selection.anchorNode.parentElement;
+    return element ? element.closest("span[data-font-size]") : null;
+  }
+
+  function normalizeRichStyleSpans() {
+    collapseRedundantFontSizeSpans();
+    for (const span of Array.from(editor.querySelectorAll("span[data-font-size]"))) {
+      if (!span.textContent) {
+        span.remove();
+      }
+    }
+  }
+
+  function unwrapFontSizeSpans(root) {
+    if (!root || !root.querySelectorAll) {
+      return;
+    }
+    for (const span of Array.from(root.querySelectorAll("span[data-font-size]"))) {
+      unwrapElement(span);
+    }
+  }
+
+  function collapseFontSizeAncestors(span) {
+    let parent = span.parentElement;
+    while (parent && parent !== editor && parent.matches("span[data-font-size]") && elementHasOnlyMeaningfulChild(parent, span)) {
+      const grandParent = parent.parentNode;
+      grandParent.insertBefore(span, parent);
+      parent.remove();
+      parent = span.parentElement;
+    }
+  }
+
+  function collapseRedundantFontSizeSpans() {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const span of Array.from(editor.querySelectorAll("span[data-font-size]"))) {
+        const fontSizeChildren = Array.from(span.children).filter((child) => child.matches("span[data-font-size]"));
+        if (fontSizeChildren.length === 1 && elementHasOnlyMeaningfulChild(span, fontSizeChildren[0])) {
+          span.replaceWith(fontSizeChildren[0]);
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+
+  function elementHasOnlyMeaningfulChild(element, child) {
+    let found = false;
+    for (const node of Array.from(element.childNodes)) {
+      if (node === child) {
+        found = true;
+      } else if (node.nodeType !== Node.TEXT_NODE || String(node.textContent || "").trim()) {
+        return false;
+      }
+    }
+    return found;
+  }
+
+  function unwrapElement(element) {
+    const parent = element.parentNode;
+    if (!parent) {
+      return;
+    }
+    while (element.firstChild) {
+      parent.insertBefore(element.firstChild, element);
+    }
+    element.remove();
   }
 
   function zoomBy(delta) {
@@ -5337,6 +5867,7 @@
       "p",
       "pre",
       "s",
+      "span",
       "strong",
       "table",
       "tbody",
@@ -5373,10 +5904,15 @@
       if (align === "left" || align === "center" || align === "right") {
         attributes.push(["style", "text-align: " + align]);
       }
+    } else if (tag === "span") {
+      const style = serializeRichMarkdownInlineStyle(element);
+      if (style) {
+        attributes.push(["style", style]);
+      }
     } else if (isExportTextAlignBlock(tag)) {
-      const align = normalizeTextAlign(element.dataset.textAlign || element.style.textAlign);
-      if (align && align !== "left") {
-        attributes.push(["style", "text-align: " + align]);
+      const style = serializeRichMarkdownBlockStyle(element);
+      if (style) {
+        attributes.push(["style", style]);
       }
     } else if (tag === "input" && element.getAttribute("type") === "checkbox") {
       attributes.push(["type", "checkbox"], ["disabled", ""]);
@@ -5405,6 +5941,7 @@
   window.InkwellBuildPrintDocument = buildPrintDocument;
   window.InkwellTestHooks = window.InkwellTestHooks || {};
   window.InkwellTestHooks.createPrintSnapshotHTML = buildPrintDocument;
+  window.InkwellTestHooks.getMarkdownContent = getMarkdownContent;
 
   function handleBridgeError(error, fallbackMessage) {
     if (String(error && error.message ? error.message : error) === "cancelled") {

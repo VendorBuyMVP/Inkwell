@@ -6,6 +6,7 @@ import { join } from "node:path";
 const runtimeFiles = [
   "app/inkwell.py",
   "app/frontend/index.html",
+  "app/frontend/editor-engine.js",
   "app/frontend/app.js",
   "app/frontend/markdown.js",
   "app/frontend/styles.css",
@@ -21,6 +22,7 @@ const runtimeFiles = [
   "scripts/run-linux.sh",
   "scripts/install-linux-desktop-entry.sh",
   "scripts/build-macos-local.sh",
+  "scripts/build-frontend.mjs",
   "scripts/check-macos-entitlements.sh",
   "scripts/smoke-macos-local.sh",
   "scripts/build-flatpak-local.sh",

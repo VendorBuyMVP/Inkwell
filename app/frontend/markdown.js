@@ -22,6 +22,13 @@
         continue;
       }
 
+      const richBlock = parseRichBlock(line);
+      if (richBlock) {
+        blocks.push(richBlock);
+        index += 1;
+        continue;
+      }
+
       const fence = line.match(/^\s{0,3}(```+|~~~+)\s*([A-Za-z0-9_.-]*)\s*$/);
       if (fence) {
         const marker = fence[1];
@@ -251,6 +258,13 @@
     let index = 0;
 
     while (index < text.length) {
+      const richSpan = parseRichSpan(text.slice(index));
+      if (richSpan) {
+        nodes.push(richSpan.node);
+        index += richSpan.length;
+        continue;
+      }
+
       if (text[index] === "`") {
         const close = text.indexOf("`", index + 1);
         if (close > index + 1) {
@@ -316,7 +330,7 @@
   }
 
   function findNextInlineMarker(text, start) {
-    const positions = ["`", "*", "[", "~~"]
+    const positions = ["`", "*", "[", "~~", "<span"]
       .map((marker) => text.indexOf(marker, start))
       .filter((position) => position >= 0);
     return positions.length ? Math.min(...positions) : text.length;
@@ -377,12 +391,14 @@
       if (block.id) {
         heading.id = block.id;
       }
+      applyRichStyle(heading, block.richStyle);
       appendInline(heading, block.children, doc);
       return heading;
     }
 
     if (block.type === "paragraph") {
       const paragraph = doc.createElement("p");
+      applyRichStyle(paragraph, block.richStyle);
       appendInline(paragraph, block.children, doc);
       return paragraph;
     }
@@ -400,6 +416,7 @@
 
     if (block.type === "blockquote") {
       const quote = doc.createElement("blockquote");
+      applyRichStyle(quote, block.richStyle);
       quote.append(...block.blocks.map((child) => renderBlock(child, doc)));
       return quote;
     }
@@ -489,8 +506,120 @@
         link.rel = "noreferrer noopener";
         appendInline(link, node.children, doc);
         parent.append(link);
+      } else if (node.type === "richSpan") {
+        const span = doc.createElement("span");
+        applyRichStyle(span, node.richStyle);
+        appendInline(span, node.children, doc);
+        parent.append(span);
       }
     }
+  }
+
+  function parseRichBlock(line) {
+    const match = String(line || "").match(/^<(p|h[1-6]|blockquote)\s+style="([^"]*)">([\s\S]*)<\/\1>$/i);
+    if (!match) {
+      return null;
+    }
+    const tag = match[1].toLowerCase();
+    const richStyle = parseRichStyle(match[2]);
+    if (!richStyle) {
+      return null;
+    }
+    const children = parseInline(match[3]);
+    if (tag === "blockquote") {
+      return { type: "blockquote", richStyle, blocks: [{ type: "paragraph", children }] };
+    }
+    if (/^h[1-6]$/.test(tag)) {
+      return {
+        type: "heading",
+        level: Number(tag[1]),
+        id: slugify(plainText(children)),
+        richStyle,
+        children,
+      };
+    }
+    return { type: "paragraph", richStyle, children };
+  }
+
+  function parseRichSpan(source) {
+    const match = String(source || "").match(/^<span\s+style="([^"]*)">([\s\S]*?)<\/span>/i);
+    if (!match) {
+      return null;
+    }
+    const richStyle = parseRichStyle(match[1]);
+    if (!richStyle || !richStyle.fontSize) {
+      return null;
+    }
+    return {
+      length: match[0].length,
+      node: {
+        type: "richSpan",
+        richStyle,
+        children: parseInline(match[2]),
+      },
+    };
+  }
+
+  function parseRichStyle(rawStyle) {
+    const style = {};
+    const declarations = String(rawStyle || "").split(";");
+    for (const declaration of declarations) {
+      const [rawName, ...rawValueParts] = declaration.split(":");
+      const name = String(rawName || "").trim().toLowerCase();
+      const value = rawValueParts.join(":").trim().toLowerCase();
+      if (!name || !value || /url\s*\(|expression\s*\(|var\s*\(/i.test(value)) {
+        continue;
+      }
+      if (name === "font-size") {
+        const match = value.match(/^([0-9]+(?:\.[0-9]+)?)px$/);
+        if (match) {
+          const fontSize = clampNumber(Number(match[1]), 5, 72);
+          style.fontSize = String(Math.round(fontSize));
+        }
+      } else if (name === "line-height") {
+        const match = value.match(/^([0-9]+(?:\.[0-9]+)?)$/);
+        if (match) {
+          style.lineHeight = String(Math.round(clampNumber(Number(match[1]), 0.8, 3) * 100) / 100);
+        }
+      } else if (name === "margin-top" || name === "margin-bottom") {
+        const match = value.match(/^([0-9]+(?:\.[0-9]+)?)em$/);
+        if (match) {
+          style.paragraphSpacing = String(Math.round(clampNumber(Number(match[1]), 0, 3) * 100) / 100);
+        }
+      } else if (name === "text-align") {
+        if (value === "center" || value === "right" || value === "justify" || value === "left") {
+          style.textAlign = value;
+        }
+      }
+    }
+    return Object.keys(style).length ? style : null;
+  }
+
+  function applyRichStyle(element, richStyle) {
+    if (!richStyle) {
+      return;
+    }
+    if (richStyle.fontSize) {
+      element.dataset.fontSize = richStyle.fontSize;
+      element.style.fontSize = richStyle.fontSize + "px";
+    }
+    if (richStyle.lineHeight) {
+      element.dataset.lineHeight = richStyle.lineHeight;
+      element.style.lineHeight = richStyle.lineHeight;
+    }
+    if (richStyle.paragraphSpacing) {
+      element.dataset.paragraphSpacing = richStyle.paragraphSpacing;
+      element.style.marginTop = richStyle.paragraphSpacing + "em";
+      element.style.marginBottom = richStyle.paragraphSpacing + "em";
+    }
+    if (richStyle.textAlign && richStyle.textAlign !== "left") {
+      element.dataset.textAlign = richStyle.textAlign;
+      element.style.textAlign = richStyle.textAlign;
+    }
+  }
+
+  function clampNumber(value, min, max) {
+    return Math.min(Math.max(value, min), max);
   }
 
   function plainText(nodes) {

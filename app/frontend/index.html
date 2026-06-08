@@ -10,6 +10,7 @@
     <title>Inkwell</title>
     <link rel="stylesheet" href="./styles.css">
     <script src="./markdown.js" defer></script>
+    <script src="./editor-bundle.js" defer></script>
     <script src="./app.js" defer></script>
   </head>
   <body>
@@ -166,6 +167,20 @@
           <button class="tool-button" type="button" data-toolbar-action="horizontalRule" aria-label="Horizontal rule" title="Horizontal rule">---</button>
         </div>
 
+        <div class="formatbar-group rich-format-controls" aria-label="Rich text formatting">
+          <label class="format-control-label" for="fontSizeControl">Size</label>
+          <input class="format-input" id="fontSizeControl" type="number" min="5" max="72" step="1" value="16" inputmode="decimal" aria-label="Font size">
+          <span class="format-unit" aria-hidden="true">px</span>
+
+          <label class="format-control-label" for="lineHeightControl">Line</label>
+          <input class="format-input compact" id="lineHeightControl" type="number" min="0.8" max="3" step="0.05" value="1.68" inputmode="decimal" aria-label="Line spacing">
+          <span class="format-unit" aria-hidden="true">x</span>
+
+          <label class="format-control-label" for="paragraphSpacingControl">Para</label>
+          <input class="format-input compact" id="paragraphSpacingControl" type="number" min="0" max="3" step="0.05" value="0.78" inputmode="decimal" aria-label="Paragraph spacing">
+          <span class="format-unit" aria-hidden="true">em</span>
+        </div>
+
         <div class="formatbar-group align-controls" aria-label="Text alignment">
           <!-- Alignment icons are vendored from Lucide; see app/frontend/vendor/lucide/LICENSE. -->
           <button class="tool-button icon-button" type="button" data-format-control="align:left" aria-label="Align left" title="Align left">
@@ -264,6 +279,7 @@
 
     <input id="fileInput" class="hidden-file-input" type="file" accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain">
 
+    <div class="format-selection-overlay" id="formatSelectionOverlay" aria-hidden="true" hidden></div>
     <div class="find-overlay" id="findOverlay" aria-hidden="true"></div>
 
     <div class="spelling-context-menu" id="spellingContextMenu" role="menu" aria-label="Spelling suggestions" hidden></div>
