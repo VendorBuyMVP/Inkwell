@@ -15,6 +15,7 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
     private var allowWindowClose = false
     private var printInfo = NSPrintInfo.shared.copy() as? NSPrintInfo ?? NSPrintInfo()
     private var activePrintJob: PrintDocumentJob?
+    private var activePDFExportJob: PrintPDFExportJob?
     private let speechSynthesizer = AVSpeechSynthesizer()
     private let markdownDefaultExtensions = ["md", "markdown", "mdown"]
 
@@ -139,6 +140,39 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
         }
         try data.write(to: url, options: .atomic)
         return ["name": .string(url.lastPathComponent)]
+    }
+
+    func exportPDF(payload: [String: JSONValue]?, completion: @escaping (Result<[String: JSONValue], Error>) -> Void) throws {
+        applyPrintPayload(payload)
+        guard activePDFExportJob == nil else {
+            throw InkwellError.invalidPayload("A PDF export is already in progress.")
+        }
+        guard let html = payload?["html"]?.stringValue, !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw InkwellError.invalidPayload("PDF document is unavailable.")
+        }
+        guard html.utf8.count <= DocumentAccess.maxDocumentBytes else {
+            throw InkwellError.documentTooLarge(html.utf8.count)
+        }
+
+        let suggestedName = payload?["name"]?.stringValue ?? "Untitled.pdf"
+        let outputURL = try choosePDFExportURL(suggestedName: suggestedName)
+        let title = payload?["title"]?.stringValue ?? window?.title ?? "Inkwell Document"
+        let job = PrintPDFExportJob(
+            html: html,
+            title: title,
+            printInfo: printInfo,
+            outputURL: outputURL
+        ) { [weak self] result in
+            self?.activePDFExportJob = nil
+            switch result {
+            case .success(let url):
+                completion(.success(["name": .string(url.lastPathComponent)]))
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+        activePDFExportJob = job
+        job.start()
     }
 
     func startSpeaking(payload: [String: JSONValue]?) throws {
@@ -496,6 +530,10 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
             bridgeResponseExists: typeof window.InkwellBridgeResponse === 'function',
             printSnapshotExists: typeof window.InkwellBuildPrintDocument === 'function',
             printSnapshotHasPageRule: printHTML.includes('@page') && printHTML.includes('size: 8.5in 11in'),
+            printSnapshotHasMarkdownBody: printHTML.includes('class="markdown-body"') && printHTML.includes('.markdown-body'),
+            printSnapshotHasRestrainedType: printHTML.includes('font: 12pt/1.5') && !printHTML.includes('h1 { font-size: 3.1em; }'),
+            printSnapshotPreservesPrintColor: printHTML.includes('-webkit-print-color-adjust: exact') && printHTML.includes('h1 { font-size: 2.35em;'),
+            exportPDFCommandExists: Boolean(document.querySelector('[data-command="exportPDF"]')),
             printSnapshotHasDocumentContent: printHTML.includes('Inkwell macOS smoke test'),
             printSnapshotHasAppShell: printHTML.includes('app-shell') || printHTML.includes('statusbar') || printHTML.includes('ruler'),
             printSnapshotHasScript: /<script[\\s>]/i.test(printHTML),
@@ -698,6 +736,31 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
         return url
     }
 
+    private func choosePDFExportURL(suggestedName: String) throws -> URL {
+        let panel = NSSavePanel()
+        panel.title = "Export PDF"
+        panel.nameFieldStringValue = suggestedName
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.pdf]
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            throw InkwellError.cancelled
+        }
+        return normalizedPDFExportURL(url)
+    }
+
+    private func normalizedPDFExportURL(_ url: URL) -> URL {
+        let markdownExtensions = Set(markdownDefaultExtensions.map { $0.lowercased() })
+        if url.pathExtension.lowercased() == "pdf" {
+            let baseURL = url.deletingPathExtension()
+            if markdownExtensions.contains(baseURL.pathExtension.lowercased()) {
+                return baseURL.deletingPathExtension().appendingPathExtension("pdf")
+            }
+            return url
+        }
+        return url.deletingPathExtension().appendingPathExtension("pdf")
+    }
+
     private func applyPrintPayload(_ payload: [String: JSONValue]?) {
         if let width = payload?["pageWidthIn"]?.numberValue,
            let height = payload?["pageHeightIn"]?.numberValue,
@@ -711,12 +774,20 @@ final class InkwellWindowController: NSWindowController, NSWindowDelegate, WKNav
         if let margin = payload?["marginRightIn"]?.numberValue, margin >= 0 {
             printInfo.rightMargin = margin * 72.0
         }
+        if let margin = payload?["marginTopIn"]?.numberValue, margin >= 0 {
+            printInfo.topMargin = margin * 72.0
+        }
+        if let margin = payload?["marginBottomIn"]?.numberValue, margin >= 0 {
+            printInfo.bottomMargin = margin * 72.0
+        }
     }
 
     private func currentPrintSettings() -> [String: JSONValue] {
         [
             "pageWidthIn": .number(printInfo.paperSize.width / 72.0),
             "pageHeightIn": .number(printInfo.paperSize.height / 72.0),
+            "marginTopIn": .number(printInfo.topMargin / 72.0),
+            "marginBottomIn": .number(printInfo.bottomMargin / 72.0),
             "marginLeftIn": .number(printInfo.leftMargin / 72.0),
             "marginRightIn": .number(printInfo.rightMargin / 72.0)
         ]
@@ -913,6 +984,129 @@ private final class PrintDocumentJob: NSObject, WKNavigationDelegate {
         info.isVerticallyCentered = false
         info.horizontalPagination = .automatic
         info.verticalPagination = .automatic
+        return info
+    }
+}
+
+private final class PrintPDFExportJob: NSObject, WKNavigationDelegate {
+    private let html: String
+    private let title: String
+    private let printInfo: NSPrintInfo
+    private let outputURL: URL
+    private let completion: (Result<URL, Error>) -> Void
+    private let webView: WKWebView
+    private let renderWindow: NSWindow
+    private var completed = false
+
+    init(
+        html: String,
+        title: String,
+        printInfo: NSPrintInfo,
+        outputURL: URL,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        self.html = html
+        self.title = title
+        self.printInfo = PrintPDFExportJob.printInfoForSnapshot(printInfo, outputURL: outputURL)
+        self.outputURL = outputURL
+        self.completion = completion
+
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+
+        self.webView = WKWebView(
+            frame: NSRect(origin: .zero, size: self.printInfo.paperSize),
+            configuration: configuration
+        )
+        self.renderWindow = NSWindow(
+            contentRect: NSRect(origin: .zero, size: self.printInfo.paperSize),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        renderWindow.isReleasedWhenClosed = false
+        renderWindow.contentView = webView
+
+        super.init()
+        webView.navigationDelegate = self
+    }
+
+    func start() {
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        DispatchQueue.main.async { [weak self] in
+            self?.runPDFExportOperation()
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        complete(.failure(error))
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        complete(.failure(error))
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+
+        decisionHandler(url.absoluteString == "about:blank" ? .allow : .cancel)
+    }
+
+    private func runPDFExportOperation() {
+        let operation = webView.printOperation(with: printInfo)
+        operation.showsPrintPanel = false
+        operation.showsProgressPanel = false
+        operation.jobTitle = title
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let didRun = operation.run()
+            DispatchQueue.main.async {
+                if didRun && FileManager.default.fileExists(atPath: self.outputURL.path) {
+                    self.complete(.success(self.outputURL))
+                } else if didRun {
+                    self.complete(.failure(InkwellError.invalidPayload("PDF export did not create a file.")))
+                } else {
+                    self.complete(.failure(InkwellError.cancelled))
+                }
+            }
+        }
+    }
+
+    private func complete(_ result: Result<URL, Error>) {
+        guard !completed else {
+            return
+        }
+        completed = true
+        renderWindow.contentView = nil
+        renderWindow.close()
+        completion(result)
+    }
+
+    private static func printInfoForSnapshot(_ source: NSPrintInfo, outputURL: URL) -> NSPrintInfo {
+        let info = source.copy() as? NSPrintInfo ?? NSPrintInfo()
+        info.leftMargin = 0
+        info.rightMargin = 0
+        info.topMargin = 0
+        info.bottomMargin = 0
+        info.isHorizontallyCentered = false
+        info.isVerticallyCentered = false
+        info.horizontalPagination = .automatic
+        info.verticalPagination = .automatic
+        info.jobDisposition = .save
+        info.dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = outputURL
         return info
     }
 }

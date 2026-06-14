@@ -367,7 +367,9 @@
         return parsed.href;
       }
     } catch (_error) {
-      return null;
+      if (!href.startsWith("//") && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(href)) {
+        return href;
+      }
     }
 
     return null;

@@ -112,6 +112,7 @@
     { id: "saveAs", label: "Save As", shortcut: "Ctrl+Shift+S", run: () => saveFile(true) },
     { id: "exportMarkdown", label: "Export Markdown", run: () => exportMarkdown() },
     { id: "exportHTML", label: "Export HTML", run: () => exportHTML() },
+    { id: "exportPDF", label: "Export PDF", run: () => exportPDF() },
     { id: "pageSetup", label: "Page Setup", shortcut: "Ctrl+Shift+P", run: () => pageSetup() },
     { id: "print", label: "Print", shortcut: "Ctrl+P", run: () => printDocument() },
     { id: "undo", label: "Undo", shortcut: "Ctrl+Z", action: "undo", scope: "editor" },
@@ -2123,6 +2124,33 @@
     });
   }
 
+  async function exportPDF() {
+    if (!bridge.native) {
+      setStatus("PDF export requires the desktop app");
+      return;
+    }
+
+    setStatus("Preparing PDF export...");
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const payload = {
+      ...currentPrintPayload(),
+      format: "pdf",
+      name: suggestedExportName(".pdf"),
+    };
+    try {
+      setStatus("Choose a PDF destination");
+      const result = await bridge.send("exportPDF", payload);
+      setStatus("Exported " + (result.name || payload.name));
+    } catch (error) {
+      if (String(error && error.message ? error.message : error) === "cancelled") {
+        setStatus("PDF export cancelled");
+        return;
+      }
+      handleBridgeError(error, "PDF export failed.");
+    }
+  }
+
   async function exportContent(payload) {
     try {
       if (bridge.native) {
@@ -2749,15 +2777,19 @@
   }
 
   function serializeRichMarkdownInlineStyle(element) {
-    const fontSize = normalizeFontSizePx(element.dataset.fontSize || element.style.fontSize.replace(/px$/, ""));
+    const rawFontSize = element.dataset.fontSize || element.style.fontSize.replace(/px$/, "");
+    const fontSize = rawFontSize ? normalizeFontSizePx(rawFontSize) : null;
     return fontSize ? "font-size: " + fontSize + "px" : "";
   }
 
   function serializeRichMarkdownBlockStyle(block) {
     const declarations = [];
-    const lineHeight = normalizeLineHeight(block.dataset.lineHeight || block.style.lineHeight);
-    const paragraphSpacing = normalizeParagraphSpacingEm(block.dataset.paragraphSpacing || "");
-    const align = normalizeTextAlign(block.dataset.textAlign || block.style.textAlign);
+    const rawLineHeight = block.dataset.lineHeight || block.style.lineHeight;
+    const rawParagraphSpacing = block.dataset.paragraphSpacing || "";
+    const rawAlign = block.dataset.textAlign || block.style.textAlign;
+    const lineHeight = rawLineHeight ? normalizeLineHeight(rawLineHeight) : null;
+    const paragraphSpacing = rawParagraphSpacing !== "" ? normalizeParagraphSpacingEm(rawParagraphSpacing) : null;
+    const align = rawAlign ? normalizeTextAlign(rawAlign) : "";
     if (lineHeight) {
       declarations.push("line-height: " + lineHeight);
     }
@@ -5658,6 +5690,8 @@
     return {
       pageWidthIn: documentSettings.pageWidthIn,
       pageHeightIn: documentSettings.pageHeightIn,
+      marginTopIn: PRINT_VERTICAL_MARGIN_IN,
+      marginBottomIn: PRINT_VERTICAL_MARGIN_IN,
       marginLeftIn: documentSettings.marginLeftIn,
       marginRightIn: documentSettings.marginRightIn,
     };
@@ -5744,40 +5778,41 @@
       "  <meta charset=\"utf-8\">\n" +
       "  <title>" + title + "</title>\n" +
       "  <style>\n" +
-      "    @page { size: " + pageWidth + "in " + pageHeight + "in; margin: " + marginTop + "in " + marginRight + "in " + marginBottom + "in " + marginLeft + "in; }\n" +
-      "    * { box-sizing: border-box; }\n" +
-      "    html, body { margin: 0; padding: 0; background: #ffffff; }\n" +
-      "    body { color: #202521; font: 12pt/1.68 -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, ui-sans-serif, system-ui, sans-serif; }\n" +
-      "    .print-document { width: 100%; overflow-wrap: break-word; }\n" +
-      "    .print-document > :first-child { margin-top: 0; }\n" +
-      "    .print-document > :last-child { margin-bottom: 0; }\n" +
-      "    h1, h2, h3, h4, h5, h6 { margin: 1.1em 0 0.45em; color: #202521; line-height: 1.16; font-weight: 780; break-after: avoid; }\n" +
-      "    h1 { font-size: 3.1em; }\n" +
-      "    h2 { font-size: 2.25em; }\n" +
-      "    h3 { font-size: 1.7em; }\n" +
-      "    h4, h5, h6 { font-size: 1.15em; }\n" +
-      "    p, ul, ol, blockquote, pre { margin: 0.78em 0; }\n" +
+      "    @page { size: " + pageWidth + "in " + pageHeight + "in; margin: " + marginTop + "in " + marginRight + "in " + marginBottom + "in " + marginLeft + "in; background: white; }\n" +
+      "    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }\n" +
+      "    html, body { margin: 0; padding: 0; background: white; }\n" +
+      "    body { color: #202521; font: 12pt/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, ui-sans-serif, system-ui, sans-serif; }\n" +
+      "    @media print { html, body { position: relative !important; width: 100% !important; display: block !important; height: auto !important; overflow: visible !important; } }\n" +
+      "    .markdown-body { width: 100%; max-width: 980px; margin: 0 auto; overflow-wrap: break-word; }\n" +
+      "    .markdown-body > :first-child { margin-top: 0; }\n" +
+      "    .markdown-body > :last-child { margin-bottom: 0; }\n" +
+      "    h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.45em; color: #202521; line-height: 1.16; font-weight: 780; break-after: avoid; }\n" +
+      "    h1 { font-size: 2.35em; border-bottom: 1px solid #cfd8d0; padding-bottom: 0.16em; }\n" +
+      "    h2 { font-size: 1.78em; }\n" +
+      "    h3 { font-size: 1.38em; }\n" +
+      "    h4, h5, h6 { font-size: 1.12em; }\n" +
+      "    p, ul, ol, blockquote, pre, table { margin: 0.72em 0; }\n" +
       "    strong, b { font-weight: 800; }\n" +
       "    em, i { color: #3d3a32; }\n" +
       "    s, strike, del { color: #66716a; text-decoration-color: #8b5e13; text-decoration-thickness: 0.08em; }\n" +
-      "    ul, ol { padding-left: 1.5em; }\n" +
-      "    li + li { margin-top: 0.28em; }\n" +
-      "    blockquote { margin-left: 0; padding: 0.2em 0 0.2em 1em; border-left: 3px solid #8b5e13; color: #46524b; }\n" +
-      "    code { border-radius: 4px; background: #eef2ef; color: #5c3d0b; padding: 0.13em 0.32em; font-family: SFMono-Regular, Consolas, 'Liberation Mono', monospace; font-size: 0.92em; overflow-wrap: anywhere; word-break: break-word; }\n" +
-      "    pre { overflow: hidden; border: 1px solid #d7ded8; border-radius: 8px; background: #f6f8f6; color: #202521; padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; break-inside: avoid; }\n" +
+      "    ul, ol { padding-left: 1.45em; }\n" +
+      "    li + li { margin-top: 0.22em; }\n" +
+      "    blockquote { margin-left: 0; padding: 0.18em 0 0.18em 1em; border-left: 3px solid #8b5e13; background: #fbf8f1; color: #46524b; }\n" +
+      "    code { border-radius: 4px; background: #eef2ef; color: #5c3d0b; padding: 0.1em 0.28em; font-family: SFMono-Regular, Consolas, 'Liberation Mono', monospace; font-size: 0.92em; overflow-wrap: anywhere; word-break: break-word; }\n" +
+      "    pre { overflow: hidden; border: 1px solid #cfd8d0; border-radius: 6px; background: #f3f6f3; color: #202521; padding: 14px; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; break-inside: avoid; }\n" +
       "    pre code { display: block; background: transparent; color: inherit; padding: 0; font-size: 0.92em; white-space: pre-wrap; }\n" +
       "    a { color: #8b5e13; text-decoration-thickness: 0.08em; text-underline-offset: 0.18em; }\n" +
-      "    hr { border: 0; border-top: 1px solid #d7ded8; margin: 1.4em 0; }\n" +
-      "    table { width: 100%; border-collapse: collapse; margin: 1em 0; table-layout: fixed; break-inside: avoid; }\n" +
-      "    th, td { border: 1px solid #d7ded8; padding: 0.48em 0.62em; vertical-align: top; overflow-wrap: anywhere; }\n" +
-      "    th { background: #eef2ef; color: #3d3a32; font-weight: 760; }\n" +
-      "    tr:nth-child(even) td { background: rgba(0, 0, 0, 0.025); }\n" +
+      "    hr { border: 0; border-top: 1px solid #d7ded8; margin: 1.15em 0; }\n" +
+      "    table { display: table; width: 100%; border-collapse: collapse; table-layout: fixed; break-inside: avoid; }\n" +
+      "    th, td { border: 1px solid #d7ded8; padding: 0.42em 0.55em; vertical-align: top; overflow-wrap: anywhere; }\n" +
+      "    th { background: #e7ede8; color: #3d3a32; font-weight: 760; }\n" +
+      "    tr:nth-child(even) td { background: #f7f9f7; }\n" +
       "    .task-list-item { list-style: none; }\n" +
       "    .task-list-item input { margin: 0 0.55em 0 -1.35em; }\n" +
       "  </style>\n" +
       "</head>\n" +
       "<body>\n" +
-      "  <main class=\"print-document\">\n" +
+      "  <main class=\"markdown-body\">\n" +
       bodyMarkup +
       "\n  </main>\n" +
       "</body>\n</html>\n";

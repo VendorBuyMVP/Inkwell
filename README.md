@@ -19,7 +19,7 @@ It stores Markdown files locally and does not require accounts, sync, telemetry,
 - Standard editor context menu for cut, copy, paste, paste as plain text, select all, and spelling suggestions
 - Basic table editing
 - macOS spelling suggestions, basic grammar checks, and read-aloud controls
-- Print, page setup, Markdown export, and HTML export commands
+- Print, page setup, Markdown export, HTML export, and macOS PDF export using native print rendering
 - Zoom controls with a status-bar zoom indicator away from 100%
 - Word and character counts for documents and selected text
 
