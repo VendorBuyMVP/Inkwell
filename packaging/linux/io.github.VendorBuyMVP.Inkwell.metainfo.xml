@@ -35,10 +35,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.12.0/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.12.1/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.12.1" date="2026-06-16">
+      <description>
+        <p>Fixes list editing caret preservation so Markdown autoformat, undoing autoformatted lists, and list-item Backspace unwrapping keep the caret at the user's logical text position.</p>
+      </description>
+    </release>
     <release version="0.12.0" date="2026-06-14">
       <description>
         <p>Adds macOS PDF export through native print rendering, improves print snapshot layout, preserves PDF margins, and keeps Export PDF on a direct save workflow instead of opening print preview.</p>
