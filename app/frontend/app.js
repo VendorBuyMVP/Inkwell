@@ -336,6 +336,7 @@
     shortcutPreferencesLoaded: false,
     markdownDefaultPromptChoice: "",
     markdownDefaultPromptShown: false,
+    pendingAutoformat: null,
     history: createHistoryState(),
   };
 
@@ -448,6 +449,8 @@
     if (isHistoryInputType(event.inputType)) {
       beginHistoryTransaction("Typing", event.inputType, getNativeInputMergeKey(event));
     }
+
+    prepareTerminalCodeBlockTextInsertion(event);
   });
 
   editor.addEventListener("input", (event) => {
@@ -455,6 +458,7 @@
       return;
     }
 
+    state.pendingAutoformat = null;
     const paragraphInput = isParagraphInput(event);
     if (!paragraphInput) {
       normalizeLooseText();
@@ -470,7 +474,9 @@
       inputType: event.inputType || "input",
       mergeKey: getNativeInputMergeKey(event),
       allowMerge: isMergeableInputType(event.inputType),
+      autoformat: state.pendingAutoformat,
     });
+    state.pendingAutoformat = null;
     scheduleStatsUpdate();
     scheduleFindRefresh();
   });
@@ -506,11 +512,7 @@
   editor.addEventListener("pointerdown", handleEditorPointerDown);
   editor.addEventListener("pointermove", handleEditorPointerMove);
   editor.addEventListener("auxclick", handleEditorAuxClick, true);
-  editor.addEventListener("click", (event) => {
-    if (event.target.closest("a")) {
-      event.preventDefault();
-    }
-  });
+  editor.addEventListener("click", handleEditorClick);
 
   editor.addEventListener("contextmenu", handleEditorContextMenu);
 
@@ -586,6 +588,10 @@
 
     if (shouldDropStaleEnterRepeat(event)) {
       event.preventDefault();
+      return;
+    }
+
+    if (handleListBackspaceKey(event)) {
       return;
     }
 
@@ -2307,6 +2313,7 @@
       committedAt: now,
       inputType: options.inputType || (pending && pending.inputType) || "input",
       mergeKey: options.mergeKey || (pending && pending.mergeKey) || "input",
+      autoformat: options.autoformat || null,
       size: 0,
     };
     entry.size = getHistoryEntrySize(entry);
@@ -2351,6 +2358,11 @@
   function undoHistory() {
     commitHistoryTransaction({ allowMerge: false });
     const history = state.history;
+    const currentEntry = history.undo[history.undo.length - 1];
+    if (undoAutomaticFormatting(currentEntry)) {
+      return true;
+    }
+
     const entry = history.undo.pop();
     if (!entry) {
       setStatus("Nothing to undo");
@@ -2407,6 +2419,7 @@
     previous.afterSelection = entry.afterSelection;
     previous.committedAt = entry.committedAt;
     previous.inputType = entry.inputType;
+    previous.autoformat = previous.autoformat || entry.autoformat || null;
     previous.size = getHistoryEntrySize(previous);
     return true;
   }
@@ -2445,7 +2458,8 @@
       stringByteSize(entry.beforeMarkdown) +
       stringByteSize(entry.afterMarkdown) +
       stringByteSize(JSON.stringify(entry.beforeSelection || null)) +
-      stringByteSize(JSON.stringify(entry.afterSelection || null))
+      stringByteSize(JSON.stringify(entry.afterSelection || null)) +
+      stringByteSize(JSON.stringify(entry.autoformat || null))
     );
   }
 
@@ -2635,7 +2649,7 @@
       if (hasSerializedBlockChildren(node)) {
         return serializeBlocks(Array.from(node.childNodes));
       }
-      return serializeInline(node).trim();
+      return escapeParagraphMarkdownBlockStart(serializeInline(node).trim());
     }
 
     if (tag === "ul" || tag === "ol") {
@@ -2724,6 +2738,12 @@
         return serializeInline(node);
       })
       .join("");
+  }
+
+  function escapeParagraphMarkdownBlockStart(markdown) {
+    return String(markdown || "")
+      .replace(/^([-*+]\s+)/, "\\$1")
+      .replace(/^(\d+[.)]\s+)/, "\\$1");
   }
 
   function serializeInlineHTML(parent) {
@@ -2871,6 +2891,39 @@
     }
   }
 
+  function prepareTerminalCodeBlockTextInsertion(event) {
+    const inputType = event && event.inputType ? event.inputType : "";
+    if (inputType !== "insertText" && inputType !== "insertCompositionText") {
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (
+      !selection ||
+      !selection.isCollapsed ||
+      selection.anchorNode !== editor ||
+      selection.focusNode !== editor ||
+      selection.anchorOffset !== selection.focusOffset
+    ) {
+      return;
+    }
+
+    const previous = editor.childNodes[selection.anchorOffset - 1];
+    if (
+      !previous ||
+      previous.nodeType !== Node.ELEMENT_NODE ||
+      previous !== editor.lastElementChild ||
+      previous.tagName.toLowerCase() !== "pre"
+    ) {
+      return;
+    }
+
+    const paragraph = document.createElement("p");
+    paragraph.append(document.createElement("br"));
+    previous.after(paragraph);
+    placeCaretAtEnd(paragraph);
+  }
+
   function isParagraphInput(event) {
     return Boolean(event && PARAGRAPH_INPUT_TYPES.has(event.inputType));
   }
@@ -2921,47 +2974,51 @@
     }
 
     const raw = block.textContent || "";
+    const caretOffset = getCollapsedTextOffsetInNode(block);
     const heading = raw.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
-      replaceBlock(block, "h" + heading[1].length, heading[2]);
+      replaceBlock(block, "h" + heading[1].length, heading[2], offsetAfterMarkdownPrefix(caretOffset, heading[1].length + 1));
       return;
     }
 
-    const task = raw.match(/^[-*+]\s+\[( |x|X)\]\s+(.+)$/);
+    const task = raw.match(/^([-*+]\s+\[( |x|X)\]\s+)(.+)$/);
     if (task) {
       const list = document.createElement("ul");
       const item = document.createElement("li");
       const checkbox = document.createElement("input");
+      markPendingListAutoformat(block, "ul", raw[0]);
       item.className = "task-list-item";
       checkbox.type = "checkbox";
-      checkbox.checked = task[1].toLowerCase() === "x";
+      checkbox.checked = task[2].toLowerCase() === "x";
       checkbox.disabled = true;
-      item.append(checkbox, ...renderInlineNodes(task[2]));
+      item.append(checkbox, ...renderInlineNodes(task[3]));
       list.append(item);
       block.replaceWith(list);
-      placeCaretAtEnd(item);
+      placeCaretAtTextOffset(item, offsetAfterMarkdownPrefix(caretOffset, task[1].length));
       return;
     }
 
-    const unordered = raw.match(/^[-*+]\s+(.+)$/);
+    const unordered = raw.match(/^([-*+])\s+(.+)$/);
     if (unordered) {
       const list = document.createElement("ul");
       const item = document.createElement("li");
-      renderInline(unordered[1], item);
+      markPendingListAutoformat(block, "ul", unordered[1]);
+      renderInline(unordered[2], item);
       list.append(item);
       block.replaceWith(list);
-      placeCaretAtEnd(item);
+      placeCaretAtTextOffset(item, offsetAfterMarkdownPrefix(caretOffset, unordered[1].length + 1));
       return;
     }
 
-    const ordered = raw.match(/^\d+[.)]\s+(.+)$/);
+    const ordered = raw.match(/^(\d+[.)])\s+(.+)$/);
     if (ordered) {
       const list = document.createElement("ol");
       const item = document.createElement("li");
-      renderInline(ordered[1], item);
+      markPendingListAutoformat(block, "ol", ordered[1]);
+      renderInline(ordered[2], item);
       list.append(item);
       block.replaceWith(list);
-      placeCaretAtEnd(item);
+      placeCaretAtTextOffset(item, offsetAfterMarkdownPrefix(caretOffset, ordered[1].length + 1));
       return;
     }
 
@@ -2971,7 +3028,7 @@
       renderInline(raw.slice(2), paragraph);
       quote.append(paragraph);
       block.replaceWith(quote);
-      placeCaretAtEnd(paragraph);
+      placeCaretAtTextOffset(paragraph, offsetAfterMarkdownPrefix(caretOffset, 2));
       return;
     }
 
@@ -2983,9 +3040,64 @@
       const inline = window.InkwellMarkdown.parseInline(raw);
       if (inline.some((node) => node.type !== "text")) {
         renderInline(raw, block);
-        placeCaretAtEnd(block);
+        placeCaretAtTextOffset(block, caretOffset);
       }
     }
+  }
+
+  function offsetAfterMarkdownPrefix(offset, prefixLength) {
+    if (offset == null) {
+      return null;
+    }
+    return Math.max(0, offset - prefixLength);
+  }
+
+  function markPendingListAutoformat(block, tagName, marker) {
+    state.pendingAutoformat = {
+      type: "list",
+      tagName,
+      marker,
+      blockIndex: Array.from(editor.children).indexOf(block),
+    };
+  }
+
+  function undoAutomaticFormatting(entry) {
+    if (!entry || !entry.autoformat || entry.autoformat.type !== "list") {
+      return false;
+    }
+
+    const block = editor.children[entry.autoformat.blockIndex];
+    if (!block || block.tagName.toLowerCase() !== entry.autoformat.tagName) {
+      return false;
+    }
+
+    const item = Array.from(block.children).find(
+      (child) => child.tagName && child.tagName.toLowerCase() === "li"
+    );
+    if (!item) {
+      return false;
+    }
+
+    const itemCaretOffset = getCollapsedTextOffsetInNode(item);
+    const paragraph = document.createElement("p");
+    renderInline(entry.autoformat.marker + " " + serializeInline(item).trim(), paragraph);
+    block.replaceWith(paragraph);
+    const markerOffset = entry.autoformat.marker.length + 1;
+    const targetOffset = itemCaretOffset == null ? null : markerOffset + itemCaretOffset;
+    placeCaretAtTextOffset(paragraph, targetOffset);
+
+    const afterMarkdown = getMarkdownContent();
+    entry.afterMarkdown = afterMarkdown;
+    entry.afterSelection = createSelectionBookmark();
+    entry.autoformat = null;
+    entry.size = getHistoryEntrySize(entry);
+    state.history.currentMarkdown = afterMarkdown;
+    state.history.redo = [];
+    updateDirtyFromHistory();
+    updateStatsNow();
+    scheduleFindRefresh();
+    setStatus("Undid automatic list formatting");
+    return true;
   }
 
   function hasCompleteInlineMarkdown(raw) {
@@ -3154,6 +3266,113 @@
     restoreCodeSelection(normalized, caret, caret);
   }
 
+  function handleListBackspaceKey(event) {
+    if (
+      event.key !== "Backspace" ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.isComposing
+    ) {
+      return false;
+    }
+
+    const context = getListItemStartBackspaceContext();
+    if (!context) {
+      return false;
+    }
+
+    event.preventDefault();
+    withHistoryTransaction("Remove List Formatting", () => {
+      unwrapListItemAsParagraph(context);
+    }, {
+      inputType: "deleteContentBackward",
+      mergeKey: "list:unwrap",
+    });
+    updateStatsNow();
+    scheduleFindRefresh();
+    setStatus("Removed list formatting");
+    return true;
+  }
+
+  function getListItemStartBackspaceContext() {
+    const selection = window.getSelection();
+    if (!selection || !selection.isCollapsed || !selection.anchorNode || !selectionIsInsideEditor()) {
+      return null;
+    }
+
+    const element =
+      selection.anchorNode.nodeType === Node.ELEMENT_NODE ? selection.anchorNode : selection.anchorNode.parentElement;
+    const item = element ? element.closest("li") : null;
+    if (!item || !editor.contains(item)) {
+      return null;
+    }
+
+    const list = item.parentElement;
+    if (!list || !["ul", "ol"].includes(list.tagName.toLowerCase())) {
+      return null;
+    }
+
+    const offset = getTextOffsetInNode(item, selection.anchorNode, selection.anchorOffset);
+    if (offset !== 0) {
+      return null;
+    }
+
+    return {
+      item,
+      list,
+      index: Array.from(list.children).indexOf(item),
+      caretOffset: offset,
+    };
+  }
+
+  function unwrapListItemAsParagraph(context) {
+    const paragraph = document.createElement("p");
+    while (context.item.firstChild) {
+      const child = context.item.firstChild;
+      if (
+        child.nodeType === Node.ELEMENT_NODE &&
+        child.tagName.toLowerCase() === "input" &&
+        child.getAttribute("type") === "checkbox"
+      ) {
+        child.remove();
+      } else {
+        paragraph.append(child);
+      }
+    }
+    if (!paragraph.textContent.trim() && !paragraph.querySelector("br")) {
+      paragraph.append(document.createElement("br"));
+    }
+
+    const items = Array.from(context.list.children);
+    const beforeItems = items.slice(0, context.index);
+    const afterItems = items.slice(context.index + 1);
+    const fragment = document.createDocumentFragment();
+    const beforeList = cloneListWithItems(context.list, beforeItems);
+    const afterList = cloneListWithItems(context.list, afterItems);
+    if (beforeList) {
+      fragment.append(beforeList);
+    }
+    fragment.append(paragraph);
+    if (afterList) {
+      fragment.append(afterList);
+    }
+    context.list.replaceWith(fragment);
+    placeCaretAtTextOffset(paragraph, context.caretOffset);
+  }
+
+  function cloneListWithItems(sourceList, items) {
+    if (!items.length) {
+      return null;
+    }
+
+    const list = sourceList.cloneNode(false);
+    for (const item of items) {
+      list.append(item);
+    }
+    return list;
+  }
+
   function getTextSelectionOffsets(root) {
     const selection = window.getSelection();
     if (
@@ -3181,6 +3400,55 @@
     } catch (_error) {
       return (root.textContent || "").length;
     }
+  }
+
+  function getCollapsedTextOffsetInNode(root) {
+    const selection = window.getSelection();
+    if (
+      !selection ||
+      !selection.isCollapsed ||
+      !selection.anchorNode ||
+      !root.contains(selection.anchorNode)
+    ) {
+      return null;
+    }
+
+    return getTextOffsetInNode(root, selection.anchorNode, selection.anchorOffset);
+  }
+
+  function placeCaretAtTextOffset(root, offset) {
+    if (offset == null) {
+      placeCaretAtEnd(root);
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+
+    let remaining = clamp(offset, 0, (root.textContent || "").length);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let textNode = walker.nextNode();
+    while (textNode) {
+      const length = textNode.textContent.length;
+      if (remaining <= length) {
+        const range = document.createRange();
+        range.setStart(textNode, remaining);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return;
+      }
+      remaining -= length;
+      textNode = walker.nextNode();
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(offset <= 0);
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
 
   function restoreCodeSelection(code, anchorOffset, focusOffset) {
@@ -3416,6 +3684,45 @@
 
   function isSecondaryEditorEvent(event) {
     return event.button === 2 || (isMacPlatform && event.button === 0 && event.ctrlKey);
+  }
+
+  function handleEditorClick(event) {
+    if (event.target.closest("a")) {
+      event.preventDefault();
+      return;
+    }
+
+    placeCaretAfterTerminalCodeBlockClick(event);
+  }
+
+  function placeCaretAfterTerminalCodeBlockClick(event) {
+    if (event.button !== 0 || event.defaultPrevented || event.target !== editor) {
+      return;
+    }
+
+    const lastBlock = editor.lastElementChild;
+    if (!lastBlock || lastBlock.tagName.toLowerCase() !== "pre") {
+      return;
+    }
+
+    const blockRect = lastBlock.getBoundingClientRect();
+    const editorRect = editor.getBoundingClientRect();
+    if (
+      event.clientY <= blockRect.bottom + 8 ||
+      event.clientY >= editorRect.bottom ||
+      event.clientX < editorRect.left ||
+      event.clientX > editorRect.right
+    ) {
+      return;
+    }
+
+    const paragraph = document.createElement("p");
+    paragraph.append(document.createElement("br"));
+    lastBlock.after(paragraph);
+
+    event.preventDefault();
+    placeCaretAtEnd(paragraph);
+    editor.focus();
   }
 
   function handleEditorContextMenu(event) {
@@ -4801,6 +5108,19 @@
     selection.addRange(range);
   }
 
+  function placeCaretAtStart(element) {
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
   function placeCaretAfterNode(node) {
     const selection = window.getSelection();
     if (!selection) {
@@ -5977,6 +6297,7 @@
   window.InkwellTestHooks = window.InkwellTestHooks || {};
   window.InkwellTestHooks.createPrintSnapshotHTML = buildPrintDocument;
   window.InkwellTestHooks.getMarkdownContent = getMarkdownContent;
+  window.InkwellTestHooks.resetHistoryToCurrentDocument = () => resetHistory(getMarkdownContent(), false);
 
   function handleBridgeError(error, fallbackMessage) {
     if (String(error && error.message ? error.message : error) === "cancelled") {

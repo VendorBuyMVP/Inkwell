@@ -95,11 +95,11 @@
 
       const paragraphLines = [];
       while (index < lines.length && !isBlank(lines[index]) && !startsBlock(lines[index])) {
-        paragraphLines.push(lines[index].trim());
+        paragraphLines.push(unescapeEscapedBlockStart(lines[index].trim()));
         index += 1;
       }
       if (!paragraphLines.length) {
-        paragraphLines.push(lines[index].trim());
+        paragraphLines.push(unescapeEscapedBlockStart(lines[index].trim()));
         index += 1;
       }
       blocks.push({ type: "paragraph", children: parseInline(paragraphLines.join(" ")) });
@@ -240,6 +240,10 @@
         line.match(/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/) ||
         matchListItem(line)
     );
+  }
+
+  function unescapeEscapedBlockStart(line) {
+    return String(line || "").replace(/^\\((?:[-*+]\s+|\d+[.)]\s+))/, "$1");
   }
 
   function isBlank(line) {
