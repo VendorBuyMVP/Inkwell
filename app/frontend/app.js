@@ -2981,12 +2981,12 @@
       return;
     }
 
-    const task = raw.match(/^([-*+]\s+\[( |x|X)\]\s+)(.+)$/);
+    const task = raw.match(/^([-*+]\s+\[([ \u00a0]|x|X)\]\s+)(.+)$/);
     if (task) {
       const list = document.createElement("ul");
       const item = document.createElement("li");
       const checkbox = document.createElement("input");
-      markPendingListAutoformat(block, "ul", raw[0]);
+      markPendingListAutoformat(block, "ul", raw[0], task[1].length);
       item.className = "task-list-item";
       checkbox.type = "checkbox";
       checkbox.checked = task[2].toLowerCase() === "x";
@@ -2998,11 +2998,15 @@
       return;
     }
 
+    if (isIncompleteTaskListMarker(raw)) {
+      return;
+    }
+
     const unordered = raw.match(/^([-*+])\s+(.+)$/);
     if (unordered) {
       const list = document.createElement("ul");
       const item = document.createElement("li");
-      markPendingListAutoformat(block, "ul", unordered[1]);
+      markPendingListAutoformat(block, "ul", unordered[1], unordered[1].length + 1);
       renderInline(unordered[2], item);
       list.append(item);
       block.replaceWith(list);
@@ -3014,7 +3018,7 @@
     if (ordered) {
       const list = document.createElement("ol");
       const item = document.createElement("li");
-      markPendingListAutoformat(block, "ol", ordered[1]);
+      markPendingListAutoformat(block, "ol", ordered[1], ordered[1].length + 1);
       renderInline(ordered[2], item);
       list.append(item);
       block.replaceWith(list);
@@ -3045,6 +3049,10 @@
     }
   }
 
+  function isIncompleteTaskListMarker(raw) {
+    return /^[-*+]\s+\[(?:[ \u00a0]|x|X)?$/.test(raw) || /^[-*+]\s+\[(?:[ \u00a0]|x|X)\]\s*$/.test(raw);
+  }
+
   function offsetAfterMarkdownPrefix(offset, prefixLength) {
     if (offset == null) {
       return null;
@@ -3052,11 +3060,14 @@
     return Math.max(0, offset - prefixLength);
   }
 
-  function markPendingListAutoformat(block, tagName, marker) {
+  function markPendingListAutoformat(block, tagName, marker, markdownPrefixLength) {
     state.pendingAutoformat = {
       type: "list",
       tagName,
       marker,
+      markdownPrefixLength: Number.isFinite(markdownPrefixLength)
+        ? markdownPrefixLength
+        : String(marker || "").length + 1,
       blockIndex: Array.from(editor.children).indexOf(block),
     };
   }
@@ -3082,7 +3093,9 @@
     const paragraph = document.createElement("p");
     renderInline(entry.autoformat.marker + " " + serializeInline(item).trim(), paragraph);
     block.replaceWith(paragraph);
-    const markerOffset = entry.autoformat.marker.length + 1;
+    const markerOffset = Number.isFinite(entry.autoformat.markdownPrefixLength)
+      ? entry.autoformat.markdownPrefixLength
+      : entry.autoformat.marker.length + 1;
     const targetOffset = itemCaretOffset == null ? null : markerOffset + itemCaretOffset;
     placeCaretAtTextOffset(paragraph, targetOffset);
 
