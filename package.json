@@ -1,6 +1,6 @@
 {
   "name": "inkwell",
-  "version": "0.9.0",
+  "version": "0.12.1",
   "description": "A simple local-first Markdown editor with no telemetry.",
   "license": "MIT",
   "scripts": {
@@ -14,12 +14,27 @@
     "flatpak:build": "bash scripts/build-flatpak-local.sh",
     "flatpak:posture": "bash scripts/validate-flatpak-posture.sh",
     "test": "echo \"Public test files are not packaged; run npm run check for public verification.\"",
+    "frontend:build": "node scripts/build-frontend.mjs",
     "assets:strip-metadata": "node scripts/strip-png-metadata.mjs app/assets",
     "security:source": "node scripts/security-source-scan.mjs",
     "security:runtime": "bash scripts/security-runtime-check.sh",
     "security:artifacts": "bash scripts/security-artifact-scan.sh",
     "check": "python3 -c \"import py_compile; py_compile.compile('app/inkwell.py', cfile='/tmp/inkwell.pyc', doraise=True)\" && npm run security:source && npm run flatpak:posture"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "@tiptap/core": "3.26.0",
+    "@tiptap/extension-table": "3.26.0",
+    "@tiptap/extension-table-cell": "3.26.0",
+    "@tiptap/extension-table-header": "3.26.0",
+    "@tiptap/extension-table-row": "3.26.0",
+    "@tiptap/extension-task-item": "3.26.0",
+    "@tiptap/extension-task-list": "3.26.0",
+    "@tiptap/extension-text-align": "3.26.0",
+    "@tiptap/extension-text-style": "3.26.0",
+    "@tiptap/markdown": "3.26.0",
+    "@tiptap/starter-kit": "3.26.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.0"
+  }
 }

@@ -18,13 +18,38 @@ cat > "$SAMPLE_FILE" <<'MARKDOWN'
 This file verifies open-with launch plumbing for the local macOS app bundle.
 MARKDOWN
 
+node - "$ROOT_DIR/platforms/macos/Inkwell/InkwellWindowController.swift" <<'NODE'
+const fs = require("node:fs");
+const source = fs.readFileSync(process.argv[2], "utf8");
+if (source.includes("private final class PDFExportJob") || source.includes("createPDF(configuration:")) {
+  throw new Error("Export PDF must not use the deprecated WKWebView.createPDF workflow.");
+}
+if (source.includes("try printDocument(payload: payload, completion: completion)")) {
+  throw new Error("Export PDF must not open the interactive print dialog.");
+}
+for (const required of [
+  "private final class PrintPDFExportJob",
+  "info.jobDisposition = .save",
+  "NSPrintInfo.AttributeKey.jobSavingURL",
+  "operation.showsPrintPanel = false",
+  "choosePDFExportURL",
+]) {
+  if (!source.includes(required)) {
+    throw new Error(`Export PDF direct print-to-PDF path is missing ${required}.`);
+  }
+}
+NODE
+
 npm run macos:build
 
 test -x "$APP_PATH/Contents/MacOS/Inkwell"
 test -f "$APP_PATH/Contents/Resources/frontend/index.html"
+test -f "$APP_PATH/Contents/Resources/frontend/editor-bundle.js"
 test -f "$APP_PATH/Contents/Resources/frontend/app.js"
 test -f "$APP_PATH/Contents/Resources/frontend/markdown.js"
 test -f "$APP_PATH/Contents/Resources/frontend/styles.css"
+test -f "$APP_PATH/Contents/Resources/frontend/vendor/lucide/LICENSE"
+test -f "$APP_PATH/Contents/Resources/frontend/vendor/tiptap/LICENSES"
 test -f "$APP_PATH/Contents/Resources/Inkwell.icns"
 
 plutil -extract CFBundleIdentifier raw -o - "$APP_PATH/Contents/Info.plist" | grep -qx 'io.github.VendorBuyMVP.Inkwell'
@@ -54,6 +79,16 @@ const required = {
   markdownExists: true,
   invokeCommandExists: true,
   bridgeResponseExists: true,
+  printSnapshotExists: true,
+  printSnapshotHasPageRule: true,
+  printSnapshotHasMarkdownBody: true,
+  printSnapshotHasRestrainedType: true,
+  printSnapshotPreservesPrintColor: true,
+  exportPDFCommandExists: true,
+  printSnapshotHasDocumentContent: true,
+  printSnapshotHasAppShell: false,
+  printSnapshotHasScript: false,
+  printSnapshotHasEditableState: false,
 };
 
 for (const [key, expected] of Object.entries(required)) {
@@ -99,6 +134,7 @@ for (const [path, expected] of [
   ["Inkwell/Keyboard Shortcuts...", { action: "frontendCommandFromMenu:", keyEquivalent: ",", modifiers: ["command"] }],
   ["Inkwell/Hide Inkwell", { action: "hide:", keyEquivalent: "h", modifiers: ["command"] }],
   ["Inkwell/Hide Others", { action: "hideOtherApplications:", keyEquivalent: "h", modifiers: ["command", "option"] }],
+  ["File/Export PDF...", { action: "frontendCommandFromMenu:", keyEquivalent: "", modifiers: [] }],
   ["Window/Minimize", { action: "performMiniaturize:", keyEquivalent: "m", modifiers: ["command"] }],
 ]) {
   const item = nativeMenuItems.get(path);

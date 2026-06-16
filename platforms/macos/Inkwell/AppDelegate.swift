@@ -1,6 +1,6 @@
 import AppKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var windowControllers: [InkwellWindowController] = []
     private var pendingOpenURLs: [URL] = []
     private let runtimeOptions = AppRuntimeOptions.parse(arguments: CommandLine.arguments)
@@ -189,6 +189,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         focusedWindowController?.invokeFrontendCommand(commandID)
     }
 
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(newDocumentFromMenu(_:)),
+            #selector(newWindowFromMenu(_:)),
+            #selector(openDocumentFromMenu(_:)),
+            #selector(clearRecentDocumentsFromMenu(_:)):
+            return true
+        case #selector(openRecentDocumentFromMenu(_:)):
+            guard let path = menuItem.representedObject as? String else {
+                return false
+            }
+            return FileManager.default.fileExists(atPath: path)
+        case #selector(saveDocumentFromMenu(_:)),
+            #selector(saveDocumentAsFromMenu(_:)),
+            #selector(closeWindowFromMenu(_:)),
+            #selector(undoFromMenu(_:)),
+            #selector(redoFromMenu(_:)),
+            #selector(findFromMenu(_:)),
+            #selector(selectAllFromMenu(_:)),
+            #selector(frontendCommandFromMenu(_:)):
+            return focusedWindowController != nil
+        default:
+            return true
+        }
+    }
+
     private func configureMainMenu() {
         let mainMenu = NSMenu()
         NSApp.mainMenu = mainMenu
@@ -286,6 +312,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             to: fileMenu,
             withTitle: "Export HTML...",
             commandID: "exportHTML",
+            keyEquivalent: ""
+        )
+        addFrontendCommandItem(
+            to: fileMenu,
+            withTitle: "Export PDF...",
+            commandID: "exportPDF",
             keyEquivalent: ""
         )
         fileMenu.addItem(.separator())
@@ -759,7 +791,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         item.target = self
         item.representedObject = commandID
-        item.keyEquivalentModifierMask = modifiers
+        item.keyEquivalentModifierMask = keyEquivalent.isEmpty ? [] : modifiers
         return item
     }
 

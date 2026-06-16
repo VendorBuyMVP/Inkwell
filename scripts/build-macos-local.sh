@@ -31,6 +31,8 @@ done
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$FRONTEND_DEST" "$RESOURCES_DIR"
 
+npm run frontend:build >/dev/null
+
 swiftc \
   -framework AppKit \
   -framework WebKit \
@@ -50,9 +52,14 @@ cp "$INFO_PLIST" "$CONTENTS_DIR/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$CONTENTS_DIR/Info.plist"
 
 cp "$ROOT_DIR/app/frontend/index.html" "$FRONTEND_DEST/index.html"
+cp "$ROOT_DIR/app/frontend/editor-bundle.js" "$FRONTEND_DEST/editor-bundle.js"
 cp "$ROOT_DIR/app/frontend/app.js" "$FRONTEND_DEST/app.js"
 cp "$ROOT_DIR/app/frontend/markdown.js" "$FRONTEND_DEST/markdown.js"
 cp "$ROOT_DIR/app/frontend/styles.css" "$FRONTEND_DEST/styles.css"
+mkdir -p "$FRONTEND_DEST/vendor/lucide"
+cp "$ROOT_DIR/app/frontend/vendor/lucide/LICENSE" "$FRONTEND_DEST/vendor/lucide/LICENSE"
+mkdir -p "$FRONTEND_DEST/vendor/tiptap"
+cp "$ROOT_DIR/app/frontend/vendor/tiptap/LICENSES" "$FRONTEND_DEST/vendor/tiptap/LICENSES"
 
 ICONSET="$BUILD_DIR/Inkwell.iconset"
 rm -rf "$ICONSET"

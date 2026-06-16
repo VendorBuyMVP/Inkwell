@@ -12,6 +12,7 @@
   const MIN_PAGE_WIDTH_IN = 4;
   const MAX_PAGE_WIDTH_IN = 17;
   const PAGE_EXPANSION_MARGIN_IN = 0.5;
+  const PRINT_VERTICAL_MARGIN_IN = 16 * 4.4 / PX_PER_INCH;
   const MAX_PREFERENCES_SHORTCUTS = 80;
   const STATS_UPDATE_DELAY_MS = 200;
   const ENTER_REPEAT_STALE_MS = 120;
@@ -111,6 +112,7 @@
     { id: "saveAs", label: "Save As", shortcut: "Ctrl+Shift+S", run: () => saveFile(true) },
     { id: "exportMarkdown", label: "Export Markdown", run: () => exportMarkdown() },
     { id: "exportHTML", label: "Export HTML", run: () => exportHTML() },
+    { id: "exportPDF", label: "Export PDF", run: () => exportPDF() },
     { id: "pageSetup", label: "Page Setup", shortcut: "Ctrl+Shift+P", run: () => pageSetup() },
     { id: "print", label: "Print", shortcut: "Ctrl+P", run: () => printDocument() },
     { id: "undo", label: "Undo", shortcut: "Ctrl+Z", action: "undo", scope: "editor" },
@@ -226,6 +228,7 @@
   const fileName = document.getElementById("fileName");
   const statusText = document.getElementById("statusText");
   const documentStats = document.getElementById("documentStats");
+  const selectionStats = document.getElementById("selectionStats");
   const dirtyState = document.getElementById("dirtyState");
   const zoomState = document.getElementById("zoomState");
   const fileInput = document.getElementById("fileInput");
@@ -252,12 +255,19 @@
   const findNextButton = document.getElementById("findNextButton");
   const findCloseButton = document.getElementById("findCloseButton");
   const findOverlay = document.getElementById("findOverlay");
+  const formatSelectionOverlay = document.getElementById("formatSelectionOverlay");
   const spellingContextMenu = document.getElementById("spellingContextMenu");
-  const selectionToolbar = document.getElementById("selectionToolbar");
+  const editorContextMenu = document.getElementById("editorContextMenu");
+  const formatBar = document.getElementById("formatBar");
+  const fontSizeControl = document.getElementById("fontSizeControl");
+  const lineHeightControl = document.getElementById("lineHeightControl");
+  const paragraphSpacingControl = document.getElementById("paragraphSpacingControl");
   const tableContextMenu = document.getElementById("tableContextMenu");
   const menuRoots = Array.from(document.querySelectorAll("[data-menu-root]"));
   const commandButtons = Array.from(document.querySelectorAll("[data-command]"));
   const toolbarButtons = Array.from(document.querySelectorAll("[data-toolbar-action]"));
+  const formatControlButtons = Array.from(document.querySelectorAll("[data-format-control]"));
+  const editorMenuButtons = Array.from(document.querySelectorAll("[data-editor-context-action]"));
   const tableMenuButtons = Array.from(document.querySelectorAll("[data-table-action]"));
 
   const EDITING_ACTIONS = new Set([
@@ -306,8 +316,10 @@
     marginDrag: null,
     scrollSyncing: false,
     confirmResolve: null,
-    savedRange: null,
-    toolbarFrame: null,
+    formatSelectionBookmark: null,
+    formatSelectionOverlayFrame: null,
+    lastEditorSelectionBookmark: null,
+    editorContext: null,
     tableContext: null,
     tableSelection: null,
     spellingContext: null,
@@ -324,6 +336,7 @@
     shortcutPreferencesLoaded: false,
     markdownDefaultPromptChoice: "",
     markdownDefaultPromptShown: false,
+    pendingAutoformat: null,
     history: createHistoryState(),
   };
 
@@ -351,20 +364,52 @@
     button.addEventListener("click", () => withMenusClosed(() => invokeCommand(button.dataset.command)));
   }
 
-  selectionToolbar.addEventListener("mousedown", (event) => {
-    event.preventDefault();
+  formatBar.addEventListener("mousedown", (event) => {
+    if (event.target.closest("button")) {
+      event.preventDefault();
+    }
   });
+
+  for (const control of [fontSizeControl, lineHeightControl, paragraphSpacingControl]) {
+    control.addEventListener("focus", () => {
+      state.formatSelectionBookmark = state.lastEditorSelectionBookmark || createSelectionBookmark();
+      scheduleFormatSelectionOverlayRender();
+    });
+  }
+
+  bindRichFormatInput(fontSizeControl, "fontSize");
+  bindRichFormatInput(lineHeightControl, "lineHeight");
+  bindRichFormatInput(paragraphSpacingControl, "paragraphSpacing");
 
   for (const button of toolbarButtons) {
     button.addEventListener("click", () => {
-      restoreSavedSelection();
+      restoreFormatSelectionForCommand();
       runMenuAction(button.dataset.toolbarAction);
-      scheduleSelectionToolbarUpdate();
+    });
+  }
+
+  for (const button of formatControlButtons) {
+    button.addEventListener("click", () => {
+      const value = button.dataset.formatControl || "";
+      if (value.startsWith("align:")) {
+        applySelectedBlockTextAlign(value.slice("align:".length));
+      }
     });
   }
 
   tableContextMenu.addEventListener("mousedown", (event) => {
     event.preventDefault();
+  });
+
+  editorContextMenu.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+  editorContextMenu.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-editor-context-action]");
+    if (!button || button.disabled) {
+      return;
+    }
+    runEditorContextAction(button.dataset.editorContextAction || "");
   });
 
   spellingContextMenu.addEventListener("mousedown", (event) => {
@@ -404,6 +449,8 @@
     if (isHistoryInputType(event.inputType)) {
       beginHistoryTransaction("Typing", event.inputType, getNativeInputMergeKey(event));
     }
+
+    prepareTerminalCodeBlockTextInsertion(event);
   });
 
   editor.addEventListener("input", (event) => {
@@ -411,6 +458,7 @@
       return;
     }
 
+    state.pendingAutoformat = null;
     const paragraphInput = isParagraphInput(event);
     if (!paragraphInput) {
       normalizeLooseText();
@@ -426,12 +474,11 @@
       inputType: event.inputType || "input",
       mergeKey: getNativeInputMergeKey(event),
       allowMerge: isMergeableInputType(event.inputType),
+      autoformat: state.pendingAutoformat,
     });
+    state.pendingAutoformat = null;
     scheduleStatsUpdate();
     scheduleFindRefresh();
-    if (!paragraphInput) {
-      scheduleSelectionToolbarUpdate();
-    }
   });
 
   editor.addEventListener("paste", (event) => {
@@ -456,7 +503,6 @@
     }, { inputType: "insertFromPaste", mergeKey: "paste" });
     scheduleStatsUpdate();
     scheduleFindRefresh();
-    scheduleSelectionToolbarUpdate();
   });
 
   editor.addEventListener("copy", handleEditorCopy);
@@ -466,11 +512,7 @@
   editor.addEventListener("pointerdown", handleEditorPointerDown);
   editor.addEventListener("pointermove", handleEditorPointerMove);
   editor.addEventListener("auxclick", handleEditorAuxClick, true);
-  editor.addEventListener("click", (event) => {
-    if (event.target.closest("a")) {
-      event.preventDefault();
-    }
-  });
+  editor.addEventListener("click", handleEditorClick);
 
   editor.addEventListener("contextmenu", handleEditorContextMenu);
 
@@ -484,11 +526,11 @@
     if (!event.target.closest("[data-menu-root]")) {
       closeAllMenus();
     }
-    if (!editor.contains(event.target) && !selectionToolbar.contains(event.target)) {
-      hideSelectionToolbar();
-    }
     if (!tableContextMenu.contains(event.target)) {
       hideTableContextMenu();
+    }
+    if (!editorContextMenu.contains(event.target)) {
+      hideEditorContextMenu();
     }
     if (!spellingContextMenu.contains(event.target)) {
       hideSpellingContextMenu();
@@ -496,15 +538,22 @@
     if (!editor.contains(event.target) && !tableContextMenu.contains(event.target)) {
       clearTableSelection();
     }
+    if (!editor.contains(event.target) && !formatBar.contains(event.target)) {
+      clearFormatSelection();
+    }
   });
 
   document.addEventListener("selectionchange", () => {
-    if (!findBar.hidden) {
-      hideSelectionToolbar();
-      return;
+    if (selectionIsInsideEditor()) {
+      state.lastEditorSelectionBookmark = createSelectionBookmark();
+      if (!formatBar.contains(document.activeElement)) {
+        hideFormatSelectionOverlay();
+      }
     }
-    scheduleSelectionToolbarUpdate();
+    updateSelectionStats();
+    syncFormatControlStates();
     updateSelectedTableCells();
+    scheduleFormatSelectionOverlayRender();
   });
 
   document.addEventListener("keydown", (event) => {
@@ -525,8 +574,8 @@
         closeFindBar();
         return;
       }
-      hideSelectionToolbar();
       hideTableContextMenu();
+      hideEditorContextMenu();
       hideSpellingContextMenu();
       clearTableSelection();
       closeAllMenus();
@@ -539,6 +588,10 @@
 
     if (shouldDropStaleEnterRepeat(event)) {
       event.preventDefault();
+      return;
+    }
+
+    if (handleListBackspaceKey(event)) {
       return;
     }
 
@@ -581,16 +634,18 @@
 
   window.addEventListener("resize", () => {
     updateLayout();
-    scheduleSelectionToolbarUpdate();
+    scheduleFormatSelectionOverlayRender();
     hideTableContextMenu();
+    hideEditorContextMenu();
     hideSpellingContextMenu();
     scheduleFindOverlayRender();
   });
 
   documentScroll.addEventListener("scroll", () => {
     syncRulerScrollFromDocument();
-    scheduleSelectionToolbarUpdate();
+    scheduleFormatSelectionOverlayRender();
     hideTableContextMenu();
+    hideEditorContextMenu();
     hideSpellingContextMenu();
     scheduleFindOverlayRender();
   });
@@ -610,6 +665,7 @@
   setupSystemThemeListener();
   loadDocument(DEFAULT_DOCUMENT, "Untitled.md", false, false);
   updateLayout();
+  syncFormatControlStates();
   editor.focus();
 
   confirmCancelButton.addEventListener("click", () => closeConfirm(false));
@@ -1142,7 +1198,6 @@
 
   function openShortcutDialog() {
     closeAllMenus();
-    hideSelectionToolbar();
     hideTableContextMenu();
     renderShortcutFields(state.shortcuts);
     clearShortcutError();
@@ -1262,7 +1317,6 @@
 
   function openFindBar(options = {}) {
     closeAllMenus();
-    hideSelectionToolbar();
     hideTableContextMenu();
     clearTableSelection();
     state.findReplaceVisible = Boolean(options.replace);
@@ -1463,9 +1517,18 @@
   }
 
   function focusFindInput(selectText) {
+    editor.blur();
     findInput.focus();
     if (selectText) {
       findInput.select();
+    }
+    if (document.activeElement !== findInput) {
+      window.requestAnimationFrame(() => {
+        findInput.focus();
+        if (selectText) {
+          findInput.select();
+        }
+      });
     }
   }
 
@@ -1702,12 +1765,10 @@
   function runMenuAction(action) {
     if (action === "undo") {
       undoHistory();
-      scheduleSelectionToolbarUpdate();
       return;
     }
     if (action === "redo") {
       redoHistory();
-      scheduleSelectionToolbarUpdate();
       return;
     }
 
@@ -1806,8 +1867,6 @@
     } else {
       updateChrome();
     }
-
-    scheduleSelectionToolbarUpdate();
   }
 
   function getActionHistoryLabel(action) {
@@ -1982,6 +2041,11 @@
   }
 
   async function pastePlainTextFromCommand() {
+    return pasteTextFromCommand({ plainText: true });
+  }
+
+  async function pasteTextFromCommand(options = {}) {
+    const plainText = Boolean(options.plainText);
     let text = "";
     try {
       if (bridge.native) {
@@ -1990,26 +2054,30 @@
       } else if (navigator.clipboard && typeof navigator.clipboard.readText === "function") {
         text = await navigator.clipboard.readText();
       } else {
-        setStatus("Plain text paste is unavailable here");
+        setStatus((plainText ? "Plain text paste" : "Paste") + " is unavailable here");
         return false;
       }
     } catch (error) {
-      handleBridgeError(error, "Plain text paste failed.");
+      handleBridgeError(error, (plainText ? "Plain text paste" : "Paste") + " failed.");
       return false;
     }
 
-    withHistoryTransaction("Paste Plain Text", () => {
+    withHistoryTransaction(plainText ? "Paste Plain Text" : "Paste", () => {
       if (hasTableSelection()) {
         pasteTableText(state.tableSelection, text);
         clearTableSelection();
-      } else {
+      } else if (!plainText && looksLikeMarkdown(text)) {
+        insertMarkdownAtSelection(text);
+      } else if (plainText) {
         insertPlainTextWithLineBreaksAtSelection(text);
+      } else {
+        insertPlainTextAtSelection(text);
       }
     }, {
       inputType: "insertFromPaste",
-      mergeKey: "paste:plain",
+      mergeKey: plainText ? "paste:plain" : "paste",
     });
-    markEdited("Pasted plain text");
+    markEdited(plainText ? "Pasted plain text" : "Pasted");
     return true;
   }
 
@@ -2032,16 +2100,17 @@
 
   async function printDocument() {
     flushStatsUpdate();
+    const payload = currentPrintPayload();
     if (bridge.native) {
       try {
-        await bridge.send("printDocument", currentPageSetupPayload());
+        await bridge.send("printDocument", payload);
         setStatus("Print dialog opened");
       } catch (error) {
         handleBridgeError(error, "Print failed.");
       }
       return;
     }
-    window.print();
+    printSnapshotInBrowser(payload.html);
   }
 
   async function exportMarkdown() {
@@ -2059,6 +2128,33 @@
       name: suggestedExportName(".html"),
       content: buildStandaloneHTMLExport(),
     });
+  }
+
+  async function exportPDF() {
+    if (!bridge.native) {
+      setStatus("PDF export requires the desktop app");
+      return;
+    }
+
+    setStatus("Preparing PDF export...");
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const payload = {
+      ...currentPrintPayload(),
+      format: "pdf",
+      name: suggestedExportName(".pdf"),
+    };
+    try {
+      setStatus("Choose a PDF destination");
+      const result = await bridge.send("exportPDF", payload);
+      setStatus("Exported " + (result.name || payload.name));
+    } catch (error) {
+      if (String(error && error.message ? error.message : error) === "cancelled") {
+        setStatus("PDF export cancelled");
+        return;
+      }
+      handleBridgeError(error, "PDF export failed.");
+    }
   }
 
   async function exportContent(payload) {
@@ -2217,6 +2313,7 @@
       committedAt: now,
       inputType: options.inputType || (pending && pending.inputType) || "input",
       mergeKey: options.mergeKey || (pending && pending.mergeKey) || "input",
+      autoformat: options.autoformat || null,
       size: 0,
     };
     entry.size = getHistoryEntrySize(entry);
@@ -2261,6 +2358,11 @@
   function undoHistory() {
     commitHistoryTransaction({ allowMerge: false });
     const history = state.history;
+    const currentEntry = history.undo[history.undo.length - 1];
+    if (undoAutomaticFormatting(currentEntry)) {
+      return true;
+    }
+
     const entry = history.undo.pop();
     if (!entry) {
       setStatus("Nothing to undo");
@@ -2304,7 +2406,6 @@
     restoreSelectionBookmark(selectionBookmark);
     updateStatsNow();
     scheduleFindRefresh();
-    scheduleSelectionToolbarUpdate();
   }
 
   function mergeHistoryEntry(entry) {
@@ -2318,6 +2419,7 @@
     previous.afterSelection = entry.afterSelection;
     previous.committedAt = entry.committedAt;
     previous.inputType = entry.inputType;
+    previous.autoformat = previous.autoformat || entry.autoformat || null;
     previous.size = getHistoryEntrySize(previous);
     return true;
   }
@@ -2356,7 +2458,8 @@
       stringByteSize(entry.beforeMarkdown) +
       stringByteSize(entry.afterMarkdown) +
       stringByteSize(JSON.stringify(entry.beforeSelection || null)) +
-      stringByteSize(JSON.stringify(entry.afterSelection || null))
+      stringByteSize(JSON.stringify(entry.afterSelection || null)) +
+      stringByteSize(JSON.stringify(entry.autoformat || null))
     );
   }
 
@@ -2402,10 +2505,33 @@
       return null;
     }
 
+    return createSelectionBookmarkFromPoints(
+      selection.anchorNode,
+      selection.anchorOffset,
+      selection.focusNode,
+      selection.focusOffset,
+      selection.isCollapsed
+    );
+  }
+
+  function createSelectionBookmarkFromRange(range) {
+    if (!range || !editor.contains(range.startContainer) || !editor.contains(range.endContainer)) {
+      return null;
+    }
+    return createSelectionBookmarkFromPoints(
+      range.startContainer,
+      range.startOffset,
+      range.endContainer,
+      range.endOffset,
+      range.collapsed
+    );
+  }
+
+  function createSelectionBookmarkFromPoints(anchorNode, anchorOffset, focusNode, focusOffset, isCollapsed) {
     return {
-      anchor: createSelectionPointBookmark(selection.anchorNode, selection.anchorOffset),
-      focus: createSelectionPointBookmark(selection.focusNode, selection.focusOffset),
-      isCollapsed: selection.isCollapsed,
+      anchor: createSelectionPointBookmark(anchorNode, anchorOffset),
+      focus: createSelectionPointBookmark(focusNode, focusOffset),
+      isCollapsed: Boolean(isCollapsed),
     };
   }
 
@@ -2432,18 +2558,14 @@
       return false;
     }
 
-    const anchor = resolveSelectionPointBookmark(bookmark.anchor);
-    const focus = resolveSelectionPointBookmark(bookmark.focus);
-    if (!anchor || !focus) {
+    const range = resolveSelectionBookmarkRange(bookmark);
+    if (!range) {
       placeCaretAtEnd(editor);
       editor.focus();
       return false;
     }
 
-    const range = document.createRange();
     try {
-      range.setStart(anchor.node, anchor.offset);
-      range.setEnd(focus.node, focus.offset);
       selection.removeAllRanges();
       selection.addRange(range);
     } catch (_error) {
@@ -2454,6 +2576,27 @@
 
     editor.focus();
     return true;
+  }
+
+  function resolveSelectionBookmarkRange(bookmark) {
+    if (!bookmark || !bookmark.anchor || !bookmark.focus) {
+      return null;
+    }
+
+    const anchor = resolveSelectionPointBookmark(bookmark.anchor);
+    const focus = resolveSelectionPointBookmark(bookmark.focus);
+    if (!anchor || !focus) {
+      return null;
+    }
+
+    const range = document.createRange();
+    try {
+      range.setStart(anchor.node, anchor.offset);
+      range.setEnd(focus.node, focus.offset);
+    } catch (_error) {
+      return null;
+    }
+    return range;
   }
 
   function resolveSelectionPointBookmark(point) {
@@ -2490,6 +2633,13 @@
     }
 
     const tag = node.tagName.toLowerCase();
+    if (isRichMarkdownBlockTag(tag) && blockHasRichMarkdownStyle(node)) {
+      const htmlTag = tag === "div" ? "p" : tag;
+      return "<" + htmlTag + " style=\"" + escapeHTML(serializeRichMarkdownBlockStyle(node)) + "\">" +
+        serializeInlineHTML(node) +
+        "</" + htmlTag + ">";
+    }
+
     if (/^h[1-6]$/.test(tag)) {
       const text = serializeInline(node).trim();
       return "#".repeat(Number(tag[1])) + (text ? " " + text : "");
@@ -2499,7 +2649,7 @@
       if (hasSerializedBlockChildren(node)) {
         return serializeBlocks(Array.from(node.childNodes));
       }
-      return serializeInline(node).trim();
+      return escapeParagraphMarkdownBlockStart(serializeInline(node).trim());
     }
 
     if (tag === "ul" || tag === "ol") {
@@ -2565,6 +2715,11 @@
         if (tag === "code") {
           return "`" + node.textContent.replace(/`/g, "\\`") + "`";
         }
+        if (tag === "span" && node.dataset.fontSize) {
+          return "<span style=\"" + escapeHTML(serializeRichMarkdownInlineStyle(node)) + "\">" +
+            serializeInlineHTML(node) +
+            "</span>";
+        }
         if (tag === "table") {
           return "\n\n" + serializeTable(node) + "\n\n";
         }
@@ -2583,6 +2738,89 @@
         return serializeInline(node);
       })
       .join("");
+  }
+
+  function escapeParagraphMarkdownBlockStart(markdown) {
+    return String(markdown || "")
+      .replace(/^([-*+]\s+)/, "\\$1")
+      .replace(/^(\d+[.)]\s+)/, "\\$1");
+  }
+
+  function serializeInlineHTML(parent) {
+    return Array.from(parent.childNodes)
+      .map((node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          return escapeHTML(node.textContent || "");
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          return "";
+        }
+
+        const tag = node.tagName.toLowerCase();
+        if (tag === "strong" || tag === "b") {
+          return "<strong>" + serializeInlineHTML(node) + "</strong>";
+        }
+        if (tag === "em" || tag === "i") {
+          return "<em>" + serializeInlineHTML(node) + "</em>";
+        }
+        if (tag === "s" || tag === "strike" || tag === "del") {
+          return "<s>" + serializeInlineHTML(node) + "</s>";
+        }
+        if (tag === "code") {
+          return "<code>" + escapeHTML(node.textContent || "") + "</code>";
+        }
+        if (tag === "a") {
+          const href = window.InkwellMarkdown.sanitizeHref(node.getAttribute("href"));
+          return href
+            ? "<a href=\"" + escapeHTML(href) + "\">" + serializeInlineHTML(node) + "</a>"
+            : serializeInlineHTML(node);
+        }
+        if (tag === "br") {
+          return "<br>";
+        }
+        if (tag === "span" && node.dataset.fontSize) {
+          return "<span style=\"" + escapeHTML(serializeRichMarkdownInlineStyle(node)) + "\">" +
+            serializeInlineHTML(node) +
+            "</span>";
+        }
+        return serializeInlineHTML(node);
+      })
+      .join("");
+  }
+
+  function isRichMarkdownBlockTag(tag) {
+    return tag === "p" || tag === "div" || tag === "blockquote" || /^h[1-6]$/.test(tag);
+  }
+
+  function blockHasRichMarkdownStyle(block) {
+    return Boolean(block.dataset.lineHeight || block.dataset.paragraphSpacing || block.dataset.textAlign);
+  }
+
+  function serializeRichMarkdownInlineStyle(element) {
+    const rawFontSize = element.dataset.fontSize || element.style.fontSize.replace(/px$/, "");
+    const fontSize = rawFontSize ? normalizeFontSizePx(rawFontSize) : null;
+    return fontSize ? "font-size: " + fontSize + "px" : "";
+  }
+
+  function serializeRichMarkdownBlockStyle(block) {
+    const declarations = [];
+    const rawLineHeight = block.dataset.lineHeight || block.style.lineHeight;
+    const rawParagraphSpacing = block.dataset.paragraphSpacing || "";
+    const rawAlign = block.dataset.textAlign || block.style.textAlign;
+    const lineHeight = rawLineHeight ? normalizeLineHeight(rawLineHeight) : null;
+    const paragraphSpacing = rawParagraphSpacing !== "" ? normalizeParagraphSpacingEm(rawParagraphSpacing) : null;
+    const align = rawAlign ? normalizeTextAlign(rawAlign) : "";
+    if (lineHeight) {
+      declarations.push("line-height: " + lineHeight);
+    }
+    if (paragraphSpacing !== null && paragraphSpacing !== "") {
+      declarations.push("margin-top: " + paragraphSpacing + "em");
+      declarations.push("margin-bottom: " + paragraphSpacing + "em");
+    }
+    if (align && align !== "left") {
+      declarations.push("text-align: " + align);
+    }
+    return declarations.join("; ");
   }
 
   function hasSerializedBlockChildren(node) {
@@ -2653,6 +2891,39 @@
     }
   }
 
+  function prepareTerminalCodeBlockTextInsertion(event) {
+    const inputType = event && event.inputType ? event.inputType : "";
+    if (inputType !== "insertText" && inputType !== "insertCompositionText") {
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (
+      !selection ||
+      !selection.isCollapsed ||
+      selection.anchorNode !== editor ||
+      selection.focusNode !== editor ||
+      selection.anchorOffset !== selection.focusOffset
+    ) {
+      return;
+    }
+
+    const previous = editor.childNodes[selection.anchorOffset - 1];
+    if (
+      !previous ||
+      previous.nodeType !== Node.ELEMENT_NODE ||
+      previous !== editor.lastElementChild ||
+      previous.tagName.toLowerCase() !== "pre"
+    ) {
+      return;
+    }
+
+    const paragraph = document.createElement("p");
+    paragraph.append(document.createElement("br"));
+    previous.after(paragraph);
+    placeCaretAtEnd(paragraph);
+  }
+
   function isParagraphInput(event) {
     return Boolean(event && PARAGRAPH_INPUT_TYPES.has(event.inputType));
   }
@@ -2703,47 +2974,55 @@
     }
 
     const raw = block.textContent || "";
+    const caretOffset = getCollapsedTextOffsetInNode(block);
     const heading = raw.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
-      replaceBlock(block, "h" + heading[1].length, heading[2]);
+      replaceBlock(block, "h" + heading[1].length, heading[2], offsetAfterMarkdownPrefix(caretOffset, heading[1].length + 1));
       return;
     }
 
-    const task = raw.match(/^[-*+]\s+\[( |x|X)\]\s+(.+)$/);
+    const task = raw.match(/^([-*+]\s+\[([ \u00a0]|x|X)\]\s+)(.+)$/);
     if (task) {
       const list = document.createElement("ul");
       const item = document.createElement("li");
       const checkbox = document.createElement("input");
+      markPendingListAutoformat(block, "ul", raw[0], task[1].length);
       item.className = "task-list-item";
       checkbox.type = "checkbox";
-      checkbox.checked = task[1].toLowerCase() === "x";
+      checkbox.checked = task[2].toLowerCase() === "x";
       checkbox.disabled = true;
-      item.append(checkbox, ...renderInlineNodes(task[2]));
+      item.append(checkbox, ...renderInlineNodes(task[3]));
       list.append(item);
       block.replaceWith(list);
-      placeCaretAtEnd(item);
+      placeCaretAtTextOffset(item, offsetAfterMarkdownPrefix(caretOffset, task[1].length));
       return;
     }
 
-    const unordered = raw.match(/^[-*+]\s+(.+)$/);
+    if (isIncompleteTaskListMarker(raw)) {
+      return;
+    }
+
+    const unordered = raw.match(/^([-*+])\s+(.+)$/);
     if (unordered) {
       const list = document.createElement("ul");
       const item = document.createElement("li");
-      renderInline(unordered[1], item);
+      markPendingListAutoformat(block, "ul", unordered[1], unordered[1].length + 1);
+      renderInline(unordered[2], item);
       list.append(item);
       block.replaceWith(list);
-      placeCaretAtEnd(item);
+      placeCaretAtTextOffset(item, offsetAfterMarkdownPrefix(caretOffset, unordered[1].length + 1));
       return;
     }
 
-    const ordered = raw.match(/^\d+[.)]\s+(.+)$/);
+    const ordered = raw.match(/^(\d+[.)])\s+(.+)$/);
     if (ordered) {
       const list = document.createElement("ol");
       const item = document.createElement("li");
-      renderInline(ordered[1], item);
+      markPendingListAutoformat(block, "ol", ordered[1], ordered[1].length + 1);
+      renderInline(ordered[2], item);
       list.append(item);
       block.replaceWith(list);
-      placeCaretAtEnd(item);
+      placeCaretAtTextOffset(item, offsetAfterMarkdownPrefix(caretOffset, ordered[1].length + 1));
       return;
     }
 
@@ -2753,7 +3032,7 @@
       renderInline(raw.slice(2), paragraph);
       quote.append(paragraph);
       block.replaceWith(quote);
-      placeCaretAtEnd(paragraph);
+      placeCaretAtTextOffset(paragraph, offsetAfterMarkdownPrefix(caretOffset, 2));
       return;
     }
 
@@ -2765,9 +3044,73 @@
       const inline = window.InkwellMarkdown.parseInline(raw);
       if (inline.some((node) => node.type !== "text")) {
         renderInline(raw, block);
-        placeCaretAtEnd(block);
+        placeCaretAtTextOffset(block, caretOffset);
       }
     }
+  }
+
+  function isIncompleteTaskListMarker(raw) {
+    return /^[-*+]\s+\[(?:[ \u00a0]|x|X)?$/.test(raw) || /^[-*+]\s+\[(?:[ \u00a0]|x|X)\]\s*$/.test(raw);
+  }
+
+  function offsetAfterMarkdownPrefix(offset, prefixLength) {
+    if (offset == null) {
+      return null;
+    }
+    return Math.max(0, offset - prefixLength);
+  }
+
+  function markPendingListAutoformat(block, tagName, marker, markdownPrefixLength) {
+    state.pendingAutoformat = {
+      type: "list",
+      tagName,
+      marker,
+      markdownPrefixLength: Number.isFinite(markdownPrefixLength)
+        ? markdownPrefixLength
+        : String(marker || "").length + 1,
+      blockIndex: Array.from(editor.children).indexOf(block),
+    };
+  }
+
+  function undoAutomaticFormatting(entry) {
+    if (!entry || !entry.autoformat || entry.autoformat.type !== "list") {
+      return false;
+    }
+
+    const block = editor.children[entry.autoformat.blockIndex];
+    if (!block || block.tagName.toLowerCase() !== entry.autoformat.tagName) {
+      return false;
+    }
+
+    const item = Array.from(block.children).find(
+      (child) => child.tagName && child.tagName.toLowerCase() === "li"
+    );
+    if (!item) {
+      return false;
+    }
+
+    const itemCaretOffset = getCollapsedTextOffsetInNode(item);
+    const paragraph = document.createElement("p");
+    renderInline(entry.autoformat.marker + " " + serializeInline(item).trim(), paragraph);
+    block.replaceWith(paragraph);
+    const markerOffset = Number.isFinite(entry.autoformat.markdownPrefixLength)
+      ? entry.autoformat.markdownPrefixLength
+      : entry.autoformat.marker.length + 1;
+    const targetOffset = itemCaretOffset == null ? null : markerOffset + itemCaretOffset;
+    placeCaretAtTextOffset(paragraph, targetOffset);
+
+    const afterMarkdown = getMarkdownContent();
+    entry.afterMarkdown = afterMarkdown;
+    entry.afterSelection = createSelectionBookmark();
+    entry.autoformat = null;
+    entry.size = getHistoryEntrySize(entry);
+    state.history.currentMarkdown = afterMarkdown;
+    state.history.redo = [];
+    updateDirtyFromHistory();
+    updateStatsNow();
+    scheduleFindRefresh();
+    setStatus("Undid automatic list formatting");
+    return true;
   }
 
   function hasCompleteInlineMarkdown(raw) {
@@ -2832,7 +3175,6 @@
 
     updateStatsNow();
     scheduleFindRefresh();
-    scheduleSelectionToolbarUpdate();
     return true;
   }
 
@@ -2937,6 +3279,113 @@
     restoreCodeSelection(normalized, caret, caret);
   }
 
+  function handleListBackspaceKey(event) {
+    if (
+      event.key !== "Backspace" ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.isComposing
+    ) {
+      return false;
+    }
+
+    const context = getListItemStartBackspaceContext();
+    if (!context) {
+      return false;
+    }
+
+    event.preventDefault();
+    withHistoryTransaction("Remove List Formatting", () => {
+      unwrapListItemAsParagraph(context);
+    }, {
+      inputType: "deleteContentBackward",
+      mergeKey: "list:unwrap",
+    });
+    updateStatsNow();
+    scheduleFindRefresh();
+    setStatus("Removed list formatting");
+    return true;
+  }
+
+  function getListItemStartBackspaceContext() {
+    const selection = window.getSelection();
+    if (!selection || !selection.isCollapsed || !selection.anchorNode || !selectionIsInsideEditor()) {
+      return null;
+    }
+
+    const element =
+      selection.anchorNode.nodeType === Node.ELEMENT_NODE ? selection.anchorNode : selection.anchorNode.parentElement;
+    const item = element ? element.closest("li") : null;
+    if (!item || !editor.contains(item)) {
+      return null;
+    }
+
+    const list = item.parentElement;
+    if (!list || !["ul", "ol"].includes(list.tagName.toLowerCase())) {
+      return null;
+    }
+
+    const offset = getTextOffsetInNode(item, selection.anchorNode, selection.anchorOffset);
+    if (offset !== 0) {
+      return null;
+    }
+
+    return {
+      item,
+      list,
+      index: Array.from(list.children).indexOf(item),
+      caretOffset: offset,
+    };
+  }
+
+  function unwrapListItemAsParagraph(context) {
+    const paragraph = document.createElement("p");
+    while (context.item.firstChild) {
+      const child = context.item.firstChild;
+      if (
+        child.nodeType === Node.ELEMENT_NODE &&
+        child.tagName.toLowerCase() === "input" &&
+        child.getAttribute("type") === "checkbox"
+      ) {
+        child.remove();
+      } else {
+        paragraph.append(child);
+      }
+    }
+    if (!paragraph.textContent.trim() && !paragraph.querySelector("br")) {
+      paragraph.append(document.createElement("br"));
+    }
+
+    const items = Array.from(context.list.children);
+    const beforeItems = items.slice(0, context.index);
+    const afterItems = items.slice(context.index + 1);
+    const fragment = document.createDocumentFragment();
+    const beforeList = cloneListWithItems(context.list, beforeItems);
+    const afterList = cloneListWithItems(context.list, afterItems);
+    if (beforeList) {
+      fragment.append(beforeList);
+    }
+    fragment.append(paragraph);
+    if (afterList) {
+      fragment.append(afterList);
+    }
+    context.list.replaceWith(fragment);
+    placeCaretAtTextOffset(paragraph, context.caretOffset);
+  }
+
+  function cloneListWithItems(sourceList, items) {
+    if (!items.length) {
+      return null;
+    }
+
+    const list = sourceList.cloneNode(false);
+    for (const item of items) {
+      list.append(item);
+    }
+    return list;
+  }
+
   function getTextSelectionOffsets(root) {
     const selection = window.getSelection();
     if (
@@ -2964,6 +3413,55 @@
     } catch (_error) {
       return (root.textContent || "").length;
     }
+  }
+
+  function getCollapsedTextOffsetInNode(root) {
+    const selection = window.getSelection();
+    if (
+      !selection ||
+      !selection.isCollapsed ||
+      !selection.anchorNode ||
+      !root.contains(selection.anchorNode)
+    ) {
+      return null;
+    }
+
+    return getTextOffsetInNode(root, selection.anchorNode, selection.anchorOffset);
+  }
+
+  function placeCaretAtTextOffset(root, offset) {
+    if (offset == null) {
+      placeCaretAtEnd(root);
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+
+    let remaining = clamp(offset, 0, (root.textContent || "").length);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let textNode = walker.nextNode();
+    while (textNode) {
+      const length = textNode.textContent.length;
+      if (remaining <= length) {
+        const range = document.createRange();
+        range.setStart(textNode, remaining);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return;
+      }
+      remaining -= length;
+      textNode = walker.nextNode();
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(offset <= 0);
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
 
   function restoreCodeSelection(code, anchorOffset, focusOffset) {
@@ -3201,13 +3699,52 @@
     return event.button === 2 || (isMacPlatform && event.button === 0 && event.ctrlKey);
   }
 
+  function handleEditorClick(event) {
+    if (event.target.closest("a")) {
+      event.preventDefault();
+      return;
+    }
+
+    placeCaretAfterTerminalCodeBlockClick(event);
+  }
+
+  function placeCaretAfterTerminalCodeBlockClick(event) {
+    if (event.button !== 0 || event.defaultPrevented || event.target !== editor) {
+      return;
+    }
+
+    const lastBlock = editor.lastElementChild;
+    if (!lastBlock || lastBlock.tagName.toLowerCase() !== "pre") {
+      return;
+    }
+
+    const blockRect = lastBlock.getBoundingClientRect();
+    const editorRect = editor.getBoundingClientRect();
+    if (
+      event.clientY <= blockRect.bottom + 8 ||
+      event.clientY >= editorRect.bottom ||
+      event.clientX < editorRect.left ||
+      event.clientX > editorRect.right
+    ) {
+      return;
+    }
+
+    const paragraph = document.createElement("p");
+    paragraph.append(document.createElement("br"));
+    lastBlock.after(paragraph);
+
+    event.preventDefault();
+    placeCaretAtEnd(paragraph);
+    editor.focus();
+  }
+
   function handleEditorContextMenu(event) {
     event.preventDefault();
     event.stopPropagation();
     const cell = event.target.closest("th, td");
     if (cell && editor.contains(cell)) {
       closeAllMenus();
-      hideSelectionToolbar();
+      hideEditorContextMenu();
       hideSpellingContextMenu();
       openTableContextMenu(cell, event.clientX, event.clientY);
       return;
@@ -3215,25 +3752,120 @@
 
     hideTableContextMenu();
     clearTableSelection();
-    handleSpellingContextMenu(event);
+    openEditorContextMenu(event);
   }
 
-  function handleSpellingContextMenu(event) {
-    hideSpellingContextMenu();
-    if (!bridge.native) {
-      return;
-    }
-
-    event.preventDefault();
+  function openEditorContextMenu(event) {
     closeAllMenus();
-    hideSelectionToolbar();
+    hideSpellingContextMenu();
 
-    const wordContext = getWordContextAtPoint(event.clientX, event.clientY) || getWordContextFromSelection();
-    if (!wordContext) {
+    const selection = window.getSelection();
+    const hasSelection = Boolean(selection && !selection.isCollapsed && selectionIsInsideEditor());
+    if (!hasSelection) {
+      placeCaretFromPoint(event.clientX, event.clientY);
+    }
+
+    state.editorContext = {
+      range: getEditorSelectionRangeBookmark(),
+      wordContext: bridge.native
+        ? getWordContextAtPoint(event.clientX, event.clientY) || getWordContextFromSelection()
+        : null,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
+    updateEditorContextMenuState();
+
+    editorContextMenu.hidden = false;
+    const rect = editorContextMenu.getBoundingClientRect();
+    const left = clamp(event.clientX, 8, window.innerWidth - rect.width - 8);
+    const top = clamp(event.clientY, 8, window.innerHeight - rect.height - 8);
+    editorContextMenu.style.left = left + "px";
+    editorContextMenu.style.top = top + "px";
+  }
+
+  function updateEditorContextMenuState() {
+    const selected = Boolean(getSelectedText());
+    for (const button of editorMenuButtons) {
+      const action = button.dataset.editorContextAction;
+      button.disabled =
+        (action === "cut" && !selected) ||
+        (action === "copy" && !selected) ||
+        (action === "spellingSuggestions" && !state.editorContext?.wordContext);
+    }
+  }
+
+  function runEditorContextAction(action) {
+    const context = state.editorContext;
+    if (action === "spellingSuggestions" && context?.wordContext) {
+      hideEditorContextMenu();
+      requestSpellingSuggestions(context.wordContext, context.clientX, context.clientY);
       return;
     }
 
-    requestSpellingSuggestions(wordContext, event.clientX, event.clientY);
+    restoreEditorContextSelection();
+    hideEditorContextMenu();
+
+    if (action === "undo" || action === "redo" || action === "selectAll") {
+      runMenuAction(action);
+      return;
+    }
+
+    editor.focus();
+    if (action === "cut" || action === "copy") {
+      if (!document.execCommand(action, false)) {
+        setStatus((action === "cut" ? "Cut" : "Copy") + " unavailable here");
+      }
+      return;
+    }
+
+    if (action === "paste") {
+      pasteTextFromCommand();
+      return;
+    }
+
+    if (action === "pastePlainText") {
+      pasteTextFromCommand({ plainText: true });
+    }
+  }
+
+  function getEditorSelectionRangeBookmark() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !selectionIsInsideEditor()) {
+      return null;
+    }
+    return selection.getRangeAt(0).cloneRange();
+  }
+
+  function restoreEditorContextSelection() {
+    const range = state.editorContext?.range;
+    if (!range) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function placeCaretFromPoint(clientX, clientY) {
+    const range = createCaretRangeFromPoint(clientX, clientY);
+    const selection = window.getSelection();
+    if (!range || !selection || !editor.contains(range.startContainer)) {
+      editor.focus();
+      return false;
+    }
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    editor.focus();
+    return true;
+  }
+
+  function hideEditorContextMenu() {
+    editorContextMenu.hidden = true;
+    state.editorContext = null;
   }
 
   function showSpellingSuggestionsForCurrentWord() {
@@ -3904,7 +4536,6 @@
     if (cell !== state.tableSelection.focus) {
       event.preventDefault();
       setTableSelectionRange(state.tableSelection.anchor, cell);
-      hideSelectionToolbar();
       const selection = window.getSelection();
       if (selection) {
         selection.removeAllRanges();
@@ -4438,7 +5069,6 @@
     if (message) {
       setStatus(message);
     }
-    scheduleSelectionToolbarUpdate();
   }
 
   function insertBlocksAtSelection(blocks, caretTarget, replaceSelection) {
@@ -4491,6 +5121,19 @@
     selection.addRange(range);
   }
 
+  function placeCaretAtStart(element) {
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
   function placeCaretAfterNode(node) {
     const selection = window.getSelection();
     if (!selection) {
@@ -4520,58 +5163,6 @@
     );
   }
 
-  function scheduleSelectionToolbarUpdate() {
-    const selection = window.getSelection();
-    if (selection && selection.isCollapsed && selectionToolbar.hidden && !state.savedRange) {
-      return;
-    }
-
-    if (state.toolbarFrame) {
-      return;
-    }
-
-    state.toolbarFrame = window.requestAnimationFrame(() => {
-      state.toolbarFrame = null;
-      updateSelectionToolbar();
-    });
-  }
-
-  function updateSelectionToolbar() {
-    const range = getSelectionRangeInEditor();
-    if (!range) {
-      hideSelectionToolbar();
-      return;
-    }
-
-    const rect = getRangeRect(range);
-    if (!rect) {
-      hideSelectionToolbar();
-      return;
-    }
-
-    state.savedRange = range.cloneRange();
-    selectionToolbar.hidden = false;
-
-    const toolbarRect = selectionToolbar.getBoundingClientRect();
-    const left = clamp(rect.left + rect.width / 2 - toolbarRect.width / 2, 8, window.innerWidth - toolbarRect.width - 8);
-    let top = rect.top - toolbarRect.height - 12;
-    if (top < 8) {
-      top = rect.bottom + 12;
-    }
-
-    selectionToolbar.style.left = left + "px";
-    selectionToolbar.style.top = clamp(top, 8, window.innerHeight - toolbarRect.height - 8) + "px";
-  }
-
-  function getSelectionRangeInEditor() {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !selectionIsInsideEditor()) {
-      return null;
-    }
-
-    return selection.getRangeAt(0);
-  }
-
   function getRangeRect(range) {
     const rect = range.getBoundingClientRect();
     if (rect.width || rect.height) {
@@ -4582,23 +5173,60 @@
     return rects.length ? rects[0] : null;
   }
 
-  function hideSelectionToolbar() {
-    selectionToolbar.hidden = true;
-    state.savedRange = null;
+  function scheduleFormatSelectionOverlayRender() {
+    if (state.formatSelectionOverlayFrame) {
+      return;
+    }
+
+    state.formatSelectionOverlayFrame = window.requestAnimationFrame(() => {
+      state.formatSelectionOverlayFrame = null;
+      renderFormatSelectionOverlay();
+    });
   }
 
-  function restoreSavedSelection() {
-    if (!state.savedRange) {
+  function renderFormatSelectionOverlay() {
+    if (!formatBar.contains(document.activeElement) || !state.formatSelectionBookmark) {
+      hideFormatSelectionOverlay();
       return;
     }
 
-    const selection = window.getSelection();
-    if (!selection) {
+    const range = resolveSelectionBookmarkRange(state.formatSelectionBookmark);
+    if (!range || range.collapsed) {
+      hideFormatSelectionOverlay();
       return;
     }
 
-    selection.removeAllRanges();
-    selection.addRange(state.savedRange);
+    const fragment = document.createDocumentFragment();
+    for (const rect of Array.from(range.getClientRects())) {
+      if (rect.width <= 0 || rect.height <= 0) {
+        continue;
+      }
+      const marker = document.createElement("span");
+      marker.className = "format-selection-highlight";
+      marker.style.left = rect.left + "px";
+      marker.style.top = rect.top + "px";
+      marker.style.width = rect.width + "px";
+      marker.style.height = rect.height + "px";
+      fragment.append(marker);
+    }
+
+    if (!fragment.childNodes.length) {
+      hideFormatSelectionOverlay();
+      return;
+    }
+
+    formatSelectionOverlay.replaceChildren(fragment);
+    formatSelectionOverlay.hidden = false;
+  }
+
+  function hideFormatSelectionOverlay() {
+    formatSelectionOverlay.hidden = true;
+    formatSelectionOverlay.replaceChildren();
+  }
+
+  function clearFormatSelection() {
+    state.formatSelectionBookmark = null;
+    hideFormatSelectionOverlay();
   }
 
   function selectEditorContents() {
@@ -4673,6 +5301,402 @@
     setStatus("Margins reset");
   }
 
+  function bindRichFormatInput(control, type) {
+    const apply = () => {
+      state.formatSelectionBookmark = state.formatSelectionBookmark || state.lastEditorSelectionBookmark || createSelectionBookmark();
+      if (type === "fontSize") {
+        applySelectedFontSize(control.value);
+      } else if (type === "lineHeight") {
+        applySelectedBlockLineHeight(control.value);
+      } else if (type === "paragraphSpacing") {
+        applySelectedBlockParagraphSpacing(control.value);
+      }
+      scheduleFormatSelectionOverlayRender();
+    };
+
+    control.addEventListener("keydown", (event) => {
+      if (!isNumericControlStepKey(event)) {
+        return;
+      }
+      event.preventDefault();
+      stepNumericFormatControl(control, event.key === "ArrowUp" ? 1 : -1);
+      apply();
+    });
+    control.addEventListener("input", apply);
+    control.addEventListener("change", apply);
+  }
+
+  function isNumericControlStepKey(event) {
+    return (
+      (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey
+    );
+  }
+
+  function stepNumericFormatControl(control, direction) {
+    const step = readNumericControlAttribute(control, "step", 1);
+    const min = readNumericControlAttribute(control, "min", Number.NEGATIVE_INFINITY);
+    const max = readNumericControlAttribute(control, "max", Number.POSITIVE_INFINITY);
+    const current = Number(control.value);
+    const fallback = readNumericControlDefault(control, min);
+    const precision = getDecimalPrecision(step);
+    const next = clamp(Number.isFinite(current) ? current + (direction * step) : fallback, min, max);
+    control.value = formatSteppedControlValue(next, precision);
+  }
+
+  function readNumericControlAttribute(control, name, fallback) {
+    const raw = control.getAttribute(name);
+    const value = Number(raw);
+    return raw !== null && raw !== "" && Number.isFinite(value) ? value : fallback;
+  }
+
+  function readNumericControlDefault(control, min) {
+    const value = Number(control.defaultValue || control.getAttribute("value"));
+    if (Number.isFinite(value)) {
+      return value;
+    }
+    return Number.isFinite(min) ? min : 0;
+  }
+
+  function getDecimalPrecision(value) {
+    const text = String(value);
+    const decimalIndex = text.indexOf(".");
+    return decimalIndex === -1 ? 0 : text.length - decimalIndex - 1;
+  }
+
+  function formatSteppedControlValue(value, precision) {
+    const factor = 10 ** precision;
+    const rounded = Math.round(value * factor) / factor;
+    return precision > 0
+      ? rounded.toFixed(precision).replace(/\.?0+$/, "")
+      : String(Math.round(rounded));
+  }
+
+  function restoreFormatSelectionForCommand() {
+    const bookmark = state.formatSelectionBookmark || state.lastEditorSelectionBookmark;
+    if (bookmark) {
+      restoreSelectionBookmark(bookmark);
+      hideFormatSelectionOverlay();
+    }
+  }
+
+  function getFormatTargetRange() {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount && selectionIsInsideEditor()) {
+      return selection.getRangeAt(0).cloneRange();
+    }
+    return resolveSelectionBookmarkRange(state.formatSelectionBookmark || state.lastEditorSelectionBookmark);
+  }
+
+  function applySelectedFontSize(value) {
+    const fontSize = normalizeFontSizePx(value);
+    if (!fontSize) {
+      syncFormatControlStates();
+      return;
+    }
+
+    const range = getFormatTargetRange();
+    if (!range || range.collapsed) {
+      setStatus("Select text to size");
+      syncFormatControlStates();
+      scheduleFormatSelectionOverlayRender();
+      return;
+    }
+
+    withHistoryTransaction("Font Size", () => {
+      const span = document.createElement("span");
+      span.dataset.fontSize = fontSize;
+      span.style.fontSize = fontSize + "px";
+      const fragment = range.extractContents();
+      unwrapFontSizeSpans(fragment);
+      span.append(fragment);
+      range.insertNode(span);
+      collapseFontSizeAncestors(span);
+      normalizeRichStyleSpans();
+      if (span.isConnected) {
+        const nextRange = document.createRange();
+        nextRange.selectNodeContents(span);
+        state.formatSelectionBookmark = createSelectionBookmarkFromRange(nextRange);
+      }
+    }, {
+      inputType: "formatFontSize",
+      mergeKey: "format:font-size",
+    });
+    markEdited("Font size " + fontSize + "px");
+    syncFormatControlStates();
+    scheduleFormatSelectionOverlayRender();
+  }
+
+  function applySelectedBlockLineHeight(value) {
+    const lineHeight = normalizeLineHeight(value);
+    if (!lineHeight) {
+      syncFormatControlStates();
+      return;
+    }
+
+    applySelectedBlockRichStyle({
+      label: "Line Spacing",
+      status: "Line spacing " + lineHeight + "x",
+      inputType: "formatLineHeight",
+      mergeKey: "format:line-height",
+      apply(block) {
+        block.dataset.lineHeight = lineHeight;
+        block.style.lineHeight = lineHeight;
+      },
+    });
+  }
+
+  function applySelectedBlockParagraphSpacing(value) {
+    const spacing = normalizeParagraphSpacingEm(value);
+    if (spacing === null) {
+      syncFormatControlStates();
+      return;
+    }
+
+    applySelectedBlockRichStyle({
+      label: "Paragraph Spacing",
+      status: "Paragraph spacing " + spacing + "em",
+      inputType: "formatParagraphSpacing",
+      mergeKey: "format:paragraph-spacing",
+      apply(block) {
+        block.dataset.paragraphSpacing = spacing;
+        block.style.marginTop = spacing + "em";
+        block.style.marginBottom = spacing + "em";
+      },
+    });
+  }
+
+  function applySelectedBlockRichStyle(options) {
+    const blocks = getRichBlockTargets();
+    if (!blocks.length) {
+      setStatus("Select a paragraph or heading to format");
+      syncFormatControlStates();
+      scheduleFormatSelectionOverlayRender();
+      return;
+    }
+
+    withHistoryTransaction(options.label, () => {
+      for (const block of blocks) {
+        options.apply(block);
+      }
+    }, {
+      inputType: options.inputType,
+      mergeKey: options.mergeKey,
+    });
+    markEdited(options.status);
+    state.formatSelectionBookmark = state.formatSelectionBookmark || state.lastEditorSelectionBookmark || createSelectionBookmark();
+    syncFormatControlStates();
+    scheduleFormatSelectionOverlayRender();
+  }
+
+  function applySelectedBlockTextAlign(align) {
+    const normalized = normalizeTextAlign(align);
+    if (!normalized) {
+      return;
+    }
+
+    const blocks = getRichBlockTargets();
+    if (!blocks.length) {
+      setStatus("Select a paragraph or heading to align");
+      syncFormatControlStates();
+      scheduleFormatSelectionOverlayRender();
+      return;
+    }
+
+    withHistoryTransaction("Text Align", () => {
+      for (const block of blocks) {
+        if (normalized === "left") {
+          delete block.dataset.textAlign;
+          block.style.textAlign = "";
+        } else {
+          block.dataset.textAlign = normalized;
+          block.style.textAlign = normalized;
+        }
+      }
+    }, {
+      inputType: "formatTextAlign",
+      mergeKey: "format:text-align",
+    });
+
+    markEdited("Block alignment set for print and rich Markdown");
+    syncFormatControlStates();
+    scheduleFormatSelectionOverlayRender();
+  }
+
+  function getRichBlockTargets() {
+    const range = getFormatTargetRange();
+    if (!range) {
+      return [];
+    }
+
+    if (!range.collapsed) {
+      return uniqueElements(getSelectedBlocks(range)).filter(isTextAlignBlock);
+    }
+
+    return uniqueElements([getActiveBlock()]).filter(isTextAlignBlock);
+  }
+
+  function isTextAlignBlock(block) {
+    if (!block || block.nodeType !== Node.ELEMENT_NODE || block.parentElement !== editor) {
+      return false;
+    }
+    const tag = block.tagName.toLowerCase();
+    return tag === "p" || tag === "blockquote" || tag === "ul" || tag === "ol" || /^h[1-6]$/.test(tag);
+  }
+
+  function normalizeTextAlign(value) {
+    return getFormattingEngine().normalizeTextAlign(value);
+  }
+
+  function normalizeFontSizePx(value) {
+    return getFormattingEngine().normalizeFontSizePx(value);
+  }
+
+  function normalizeLineHeight(value) {
+    return getFormattingEngine().normalizeLineHeight(value);
+  }
+
+  function normalizeParagraphSpacingEm(value) {
+    return getFormattingEngine().normalizeParagraphSpacingEm(value);
+  }
+
+  function getFormattingEngine() {
+    return window.InkwellEditorEngine || {
+      normalizeTextAlign(value) {
+        const align = String(value || "").trim().toLowerCase();
+        return ["left", "center", "right", "justify"].includes(align) ? align : "";
+      },
+      normalizeFontSizePx(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? String(clamp(Math.round(number), 5, 72)) : null;
+      },
+      normalizeLineHeight(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? String(Math.round(clamp(number, 0.8, 3) * 100) / 100) : null;
+      },
+      normalizeParagraphSpacingEm(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? String(Math.round(clamp(number, 0, 3) * 100) / 100) : null;
+      },
+    };
+  }
+
+  function getBlockTextAlign(block) {
+    if (!block || block.nodeType !== Node.ELEMENT_NODE) {
+      return "left";
+    }
+    return normalizeTextAlign(block.dataset.textAlign || block.style.textAlign) || "left";
+  }
+
+  function getActiveTextAlign() {
+    const blocks = getRichBlockTargets();
+    if (!blocks.length) {
+      return "left";
+    }
+    const first = getBlockTextAlign(blocks[0]);
+    return blocks.every((block) => getBlockTextAlign(block) === first) ? first : "";
+  }
+
+  function syncFormatControlStates() {
+    const activeAlign = getActiveTextAlign();
+    for (const button of formatControlButtons) {
+      const value = button.dataset.formatControl || "";
+      const pressed = value === "align:" + activeAlign;
+      button.setAttribute("aria-pressed", pressed ? "true" : "false");
+    }
+
+    const activeSpan = getActiveRichStyleSpan();
+    const activeBlock = getRichBlockTargets()[0];
+    if (document.activeElement !== fontSizeControl) {
+      fontSizeControl.value = activeSpan?.dataset.fontSize || "16";
+    }
+    if (document.activeElement !== lineHeightControl) {
+      lineHeightControl.value = activeBlock?.dataset.lineHeight || "1.68";
+    }
+    if (document.activeElement !== paragraphSpacingControl) {
+      paragraphSpacingControl.value = activeBlock?.dataset.paragraphSpacing || "0.78";
+    }
+  }
+
+  function getActiveRichStyleSpan() {
+    const selection = window.getSelection();
+    if (!selection || !selection.anchorNode || !editor.contains(selection.anchorNode)) {
+      return null;
+    }
+    const element = selection.anchorNode.nodeType === Node.ELEMENT_NODE
+      ? selection.anchorNode
+      : selection.anchorNode.parentElement;
+    return element ? element.closest("span[data-font-size]") : null;
+  }
+
+  function normalizeRichStyleSpans() {
+    collapseRedundantFontSizeSpans();
+    for (const span of Array.from(editor.querySelectorAll("span[data-font-size]"))) {
+      if (!span.textContent) {
+        span.remove();
+      }
+    }
+  }
+
+  function unwrapFontSizeSpans(root) {
+    if (!root || !root.querySelectorAll) {
+      return;
+    }
+    for (const span of Array.from(root.querySelectorAll("span[data-font-size]"))) {
+      unwrapElement(span);
+    }
+  }
+
+  function collapseFontSizeAncestors(span) {
+    let parent = span.parentElement;
+    while (parent && parent !== editor && parent.matches("span[data-font-size]") && elementHasOnlyMeaningfulChild(parent, span)) {
+      const grandParent = parent.parentNode;
+      grandParent.insertBefore(span, parent);
+      parent.remove();
+      parent = span.parentElement;
+    }
+  }
+
+  function collapseRedundantFontSizeSpans() {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const span of Array.from(editor.querySelectorAll("span[data-font-size]"))) {
+        const fontSizeChildren = Array.from(span.children).filter((child) => child.matches("span[data-font-size]"));
+        if (fontSizeChildren.length === 1 && elementHasOnlyMeaningfulChild(span, fontSizeChildren[0])) {
+          span.replaceWith(fontSizeChildren[0]);
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+
+  function elementHasOnlyMeaningfulChild(element, child) {
+    let found = false;
+    for (const node of Array.from(element.childNodes)) {
+      if (node === child) {
+        found = true;
+      } else if (node.nodeType !== Node.TEXT_NODE || String(node.textContent || "").trim()) {
+        return false;
+      }
+    }
+    return found;
+  }
+
+  function unwrapElement(element) {
+    const parent = element.parentNode;
+    if (!parent) {
+      return;
+    }
+    while (element.firstChild) {
+      parent.insertBefore(element.firstChild, element);
+    }
+    element.remove();
+  }
+
   function zoomBy(delta) {
     setZoom(documentSettings.zoom + delta);
   }
@@ -4702,6 +5726,7 @@
     document.documentElement.style.setProperty("--page-margin-right-px", marginRightPx + "px");
     document.documentElement.style.setProperty("--editor-font-size-px", fontSizePx + "px");
     document.body.dataset.theme = documentSettings.theme;
+    syncFormatControlStates();
 
     ruler.hidden = !documentSettings.rulerVisible;
     document.body.classList.toggle("ruler-hidden", !documentSettings.rulerVisible);
@@ -4819,6 +5844,37 @@
     const words = countRenderedWords(wordText);
     const chars = countRenderedCharacters(characterText);
     documentStats.textContent = words + " words / " + chars + " chars";
+    updateSelectionStats();
+  }
+
+  function updateSelectionStats() {
+    const selectedText = getSelectionStatsText();
+    if (!selectedText) {
+      selectionStats.hidden = true;
+      selectionStats.textContent = "";
+      return;
+    }
+
+    const words = countRenderedWords(selectedText);
+    const chars = countSelectedCharacters(selectedText);
+    selectionStats.textContent = "Selected: " + formatCount(words, "word") + " / " + formatCount(chars, "char");
+    selectionStats.hidden = false;
+  }
+
+  function getSelectionStatsText() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !selectionIsInsideEditor()) {
+      return "";
+    }
+    return selection.toString();
+  }
+
+  function countSelectedCharacters(text) {
+    return String(text || "").length;
+  }
+
+  function formatCount(count, singular) {
+    return count + " " + singular + (count === 1 ? "" : "s");
   }
 
   function getRenderedStatsText() {
@@ -4967,8 +6023,18 @@
     return {
       pageWidthIn: documentSettings.pageWidthIn,
       pageHeightIn: documentSettings.pageHeightIn,
+      marginTopIn: PRINT_VERTICAL_MARGIN_IN,
+      marginBottomIn: PRINT_VERTICAL_MARGIN_IN,
       marginLeftIn: documentSettings.marginLeftIn,
       marginRightIn: documentSettings.marginRightIn,
+    };
+  }
+
+  function currentPrintPayload() {
+    return {
+      ...currentPageSetupPayload(),
+      title: state.name || "Inkwell Document",
+      html: buildPrintDocument(),
     };
   }
 
@@ -5025,6 +6091,88 @@
       "<body>\n" +
       bodyMarkup +
       "\n</body>\n</html>\n";
+  }
+
+  function buildPrintDocument() {
+    const clone = editor.cloneNode(true);
+    sanitizeExportHTML(clone);
+    const title = escapeHTML(state.name || "Inkwell Document");
+    const bodyMarkup = serializeExportChildren(clone);
+    const pageWidth = formatPrintInches(documentSettings.pageWidthIn);
+    const pageHeight = formatPrintInches(documentSettings.pageHeightIn);
+    const marginTop = formatPrintInches(PRINT_VERTICAL_MARGIN_IN);
+    const marginBottom = formatPrintInches(PRINT_VERTICAL_MARGIN_IN);
+    const marginLeft = formatPrintInches(documentSettings.marginLeftIn);
+    const marginRight = formatPrintInches(documentSettings.marginRightIn);
+
+    return "<!doctype html>\n" +
+      "<html lang=\"en\">\n" +
+      "<head>\n" +
+      "  <meta charset=\"utf-8\">\n" +
+      "  <title>" + title + "</title>\n" +
+      "  <style>\n" +
+      "    @page { size: " + pageWidth + "in " + pageHeight + "in; margin: " + marginTop + "in " + marginRight + "in " + marginBottom + "in " + marginLeft + "in; background: white; }\n" +
+      "    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }\n" +
+      "    html, body { margin: 0; padding: 0; background: white; }\n" +
+      "    body { color: #202521; font: 12pt/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, ui-sans-serif, system-ui, sans-serif; }\n" +
+      "    @media print { html, body { position: relative !important; width: 100% !important; display: block !important; height: auto !important; overflow: visible !important; } }\n" +
+      "    .markdown-body { width: 100%; max-width: 980px; margin: 0 auto; overflow-wrap: break-word; }\n" +
+      "    .markdown-body > :first-child { margin-top: 0; }\n" +
+      "    .markdown-body > :last-child { margin-bottom: 0; }\n" +
+      "    h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.45em; color: #202521; line-height: 1.16; font-weight: 780; break-after: avoid; }\n" +
+      "    h1 { font-size: 2.35em; border-bottom: 1px solid #cfd8d0; padding-bottom: 0.16em; }\n" +
+      "    h2 { font-size: 1.78em; }\n" +
+      "    h3 { font-size: 1.38em; }\n" +
+      "    h4, h5, h6 { font-size: 1.12em; }\n" +
+      "    p, ul, ol, blockquote, pre, table { margin: 0.72em 0; }\n" +
+      "    strong, b { font-weight: 800; }\n" +
+      "    em, i { color: #3d3a32; }\n" +
+      "    s, strike, del { color: #66716a; text-decoration-color: #8b5e13; text-decoration-thickness: 0.08em; }\n" +
+      "    ul, ol { padding-left: 1.45em; }\n" +
+      "    li + li { margin-top: 0.22em; }\n" +
+      "    blockquote { margin-left: 0; padding: 0.18em 0 0.18em 1em; border-left: 3px solid #8b5e13; background: #fbf8f1; color: #46524b; }\n" +
+      "    code { border-radius: 4px; background: #eef2ef; color: #5c3d0b; padding: 0.1em 0.28em; font-family: SFMono-Regular, Consolas, 'Liberation Mono', monospace; font-size: 0.92em; overflow-wrap: anywhere; word-break: break-word; }\n" +
+      "    pre { overflow: hidden; border: 1px solid #cfd8d0; border-radius: 6px; background: #f3f6f3; color: #202521; padding: 14px; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; break-inside: avoid; }\n" +
+      "    pre code { display: block; background: transparent; color: inherit; padding: 0; font-size: 0.92em; white-space: pre-wrap; }\n" +
+      "    a { color: #8b5e13; text-decoration-thickness: 0.08em; text-underline-offset: 0.18em; }\n" +
+      "    hr { border: 0; border-top: 1px solid #d7ded8; margin: 1.15em 0; }\n" +
+      "    table { display: table; width: 100%; border-collapse: collapse; table-layout: fixed; break-inside: avoid; }\n" +
+      "    th, td { border: 1px solid #d7ded8; padding: 0.42em 0.55em; vertical-align: top; overflow-wrap: anywhere; }\n" +
+      "    th { background: #e7ede8; color: #3d3a32; font-weight: 760; }\n" +
+      "    tr:nth-child(even) td { background: #f7f9f7; }\n" +
+      "    .task-list-item { list-style: none; }\n" +
+      "    .task-list-item input { margin: 0 0.55em 0 -1.35em; }\n" +
+      "  </style>\n" +
+      "</head>\n" +
+      "<body>\n" +
+      "  <main class=\"markdown-body\">\n" +
+      bodyMarkup +
+      "\n  </main>\n" +
+      "</body>\n</html>\n";
+  }
+
+  function printSnapshotInBrowser(html) {
+    const frame = document.createElement("iframe");
+    frame.hidden = true;
+    frame.setAttribute("sandbox", "allow-same-origin allow-modals");
+    document.body.append(frame);
+    frame.onload = () => {
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } finally {
+        window.setTimeout(() => frame.remove(), 1000);
+      }
+    };
+    frame.srcdoc = html;
+  }
+
+  function formatPrintInches(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) {
+      return "0";
+    }
+    return number.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
   }
 
   function sanitizeExportHTML(root) {
@@ -5087,6 +6235,7 @@
       "p",
       "pre",
       "s",
+      "span",
       "strong",
       "table",
       "tbody",
@@ -5123,6 +6272,16 @@
       if (align === "left" || align === "center" || align === "right") {
         attributes.push(["style", "text-align: " + align]);
       }
+    } else if (tag === "span") {
+      const style = serializeRichMarkdownInlineStyle(element);
+      if (style) {
+        attributes.push(["style", style]);
+      }
+    } else if (isExportTextAlignBlock(tag)) {
+      const style = serializeRichMarkdownBlockStyle(element);
+      if (style) {
+        attributes.push(["style", style]);
+      }
     } else if (tag === "input" && element.getAttribute("type") === "checkbox") {
       attributes.push(["type", "checkbox"], ["disabled", ""]);
       if (element.checked) {
@@ -5135,6 +6294,10 @@
       .join("");
   }
 
+  function isExportTextAlignBlock(tag) {
+    return tag === "p" || tag === "blockquote" || tag === "ul" || tag === "ol" || /^h[1-6]$/.test(tag);
+  }
+
   function escapeHTML(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -5142,6 +6305,12 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
+
+  window.InkwellBuildPrintDocument = buildPrintDocument;
+  window.InkwellTestHooks = window.InkwellTestHooks || {};
+  window.InkwellTestHooks.createPrintSnapshotHTML = buildPrintDocument;
+  window.InkwellTestHooks.getMarkdownContent = getMarkdownContent;
+  window.InkwellTestHooks.resetHistoryToCurrentDocument = () => resetHistory(getMarkdownContent(), false);
 
   function handleBridgeError(error, fallbackMessage) {
     if (String(error && error.message ? error.message : error) === "cancelled") {

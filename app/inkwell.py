@@ -321,6 +321,8 @@ class InkwellWindowSession:
                 result = self.app._load_preferences()
             elif action == "savePreferences":
                 result = self.app._save_preferences(data)
+            elif action == "exportPDF":
+                raise ValueError("PDF export is currently available in the macOS local build only.")
             elif action == "closeWindow":
                 self._reply(request_id, True, {})
                 self._close_window()

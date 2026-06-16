@@ -35,10 +35,40 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.9.0/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.12.1/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.12.1" date="2026-06-16">
+      <description>
+        <p>Fixes list editing caret preservation so Markdown autoformat, undoing autoformatted lists, and list-item Backspace unwrapping keep the caret at the user's logical text position.</p>
+      </description>
+    </release>
+    <release version="0.12.0" date="2026-06-14">
+      <description>
+        <p>Adds macOS PDF export through native print rendering, improves print snapshot layout, preserves PDF margins, and keeps Export PDF on a direct save workflow instead of opening print preview.</p>
+      </description>
+    </release>
+    <release version="0.11.0" date="2026-06-08">
+      <description>
+        <p>Adds source-backed typed controls for selected text font size, selected paragraph line spacing, paragraph spacing, and alignment, with local Tiptap formatting primitives bundled into the app.</p>
+      </description>
+    </release>
+    <release version="0.10.0" date="2026-06-08">
+      <description>
+        <p>Adds a persistent formatting bar and selected-block alignment controls backed by open-source editor and icon patterns, while keeping Markdown save and export behavior clean.</p>
+      </description>
+    </release>
+    <release version="0.9.2" date="2026-06-06">
+      <description>
+        <p>Adds a standard editor right-click menu for undo, redo, cut, copy, paste, paste as plain text, select all, and spelling suggestions, and fixes context-menu Paste so it inserts clipboard text directly.</p>
+      </description>
+    </release>
+    <release version="0.9.1" date="2026-05-28">
+      <description>
+        <p>Adds live selection statistics in the status bar so highlighted text reports exact word and character counts, and improves print output by rendering a sanitized document snapshot instead of printing the editor chrome.</p>
+      </description>
+    </release>
     <release version="0.9.0" date="2026-05-12">
       <description>
         <p>Adds a macOS Open Recent submenu, tracks recently opened local documents, and prompts macOS users to make Inkwell their default Markdown editor without storing document contents.</p>

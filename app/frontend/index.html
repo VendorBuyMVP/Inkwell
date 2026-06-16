@@ -10,6 +10,7 @@
     <title>Inkwell</title>
     <link rel="stylesheet" href="./styles.css">
     <script src="./markdown.js" defer></script>
+    <script src="./editor-bundle.js" defer></script>
     <script src="./app.js" defer></script>
   </head>
   <body>
@@ -30,6 +31,7 @@
                 <span class="menu-separator" aria-hidden="true"></span>
                 <button class="menu-item" type="button" role="menuitem" data-command="exportMarkdown">Export Markdown</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="exportHTML">Export HTML</button>
+                <button class="menu-item" type="button" role="menuitem" data-command="exportPDF">Export PDF</button>
                 <span class="menu-separator" aria-hidden="true"></span>
                 <button class="menu-item" type="button" role="menuitem" data-command="pageSetup">Page Setup</button>
                 <button class="menu-item" type="button" role="menuitem" data-command="print">Print</button>
@@ -141,6 +143,78 @@
         </div>
       </header>
 
+      <section class="formatbar" id="formatBar" role="toolbar" aria-label="Formatting and layout">
+        <div class="formatbar-group" aria-label="Text style">
+          <button class="tool-button strong" type="button" data-toolbar-action="bold" aria-label="Bold" title="Bold">B</button>
+          <button class="tool-button emphasis" type="button" data-toolbar-action="italic" aria-label="Italic" title="Italic">I</button>
+          <button class="tool-button strike" type="button" data-toolbar-action="strikethrough" aria-label="Strikethrough" title="Strikethrough">S</button>
+          <button class="tool-button code" type="button" data-toolbar-action="inlineCode" aria-label="Inline code" title="Inline code">&lt;/&gt;</button>
+        </div>
+
+        <div class="formatbar-group" aria-label="Block style">
+          <button class="tool-button" type="button" data-toolbar-action="paragraph" aria-label="Paragraph text" title="Paragraph text">P</button>
+          <button class="tool-button" type="button" data-toolbar-action="heading1" aria-label="Heading 1" title="Heading 1">H1</button>
+          <button class="tool-button" type="button" data-toolbar-action="heading2" aria-label="Heading 2" title="Heading 2">H2</button>
+          <button class="tool-button" type="button" data-toolbar-action="heading3" aria-label="Heading 3" title="Heading 3">H3</button>
+          <button class="tool-button" type="button" data-toolbar-action="blockquote" aria-label="Block quote" title="Block quote">&gt;</button>
+        </div>
+
+        <div class="formatbar-group" aria-label="Lists and inserts">
+          <button class="tool-button" type="button" data-toolbar-action="bulletList" aria-label="Bulleted list" title="Bulleted list">-</button>
+          <button class="tool-button" type="button" data-toolbar-action="numberedList" aria-label="Numbered list" title="Numbered list">1.</button>
+          <button class="tool-button" type="button" data-toolbar-action="taskList" aria-label="Task list" title="Task list">[ ]</button>
+          <button class="tool-button code" type="button" data-toolbar-action="codeBlock" aria-label="Code block" title="Code block">{ }</button>
+          <button class="tool-button" type="button" data-toolbar-action="table" aria-label="Table" title="Table">T</button>
+          <button class="tool-button" type="button" data-toolbar-action="horizontalRule" aria-label="Horizontal rule" title="Horizontal rule">---</button>
+        </div>
+
+        <div class="formatbar-group rich-format-controls" aria-label="Rich text formatting">
+          <label class="format-control-label" for="fontSizeControl">Size</label>
+          <input class="format-input" id="fontSizeControl" type="number" min="5" max="72" step="1" value="16" inputmode="decimal" aria-label="Font size">
+          <span class="format-unit" aria-hidden="true">px</span>
+
+          <label class="format-control-label" for="lineHeightControl">Line</label>
+          <input class="format-input compact" id="lineHeightControl" type="number" min="0.8" max="3" step="0.05" value="1.68" inputmode="decimal" aria-label="Line spacing">
+          <span class="format-unit" aria-hidden="true">x</span>
+
+          <label class="format-control-label" for="paragraphSpacingControl">Para</label>
+          <input class="format-input compact" id="paragraphSpacingControl" type="number" min="0" max="3" step="0.05" value="0.78" inputmode="decimal" aria-label="Paragraph spacing">
+          <span class="format-unit" aria-hidden="true">em</span>
+        </div>
+
+        <div class="formatbar-group align-controls" aria-label="Text alignment">
+          <!-- Alignment icons are vendored from Lucide; see app/frontend/vendor/lucide/LICENSE. -->
+          <button class="tool-button icon-button" type="button" data-format-control="align:left" aria-label="Align left" title="Align left">
+            <svg class="tool-icon lucide lucide-text-align-start" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 5H3"></path>
+              <path d="M15 12H3"></path>
+              <path d="M17 19H3"></path>
+            </svg>
+          </button>
+          <button class="tool-button icon-button" type="button" data-format-control="align:center" aria-label="Align center" title="Align center">
+            <svg class="tool-icon lucide lucide-text-align-center" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 5H3"></path>
+              <path d="M17 12H7"></path>
+              <path d="M19 19H5"></path>
+            </svg>
+          </button>
+          <button class="tool-button icon-button" type="button" data-format-control="align:right" aria-label="Align right" title="Align right">
+            <svg class="tool-icon lucide lucide-text-align-end" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 5H3"></path>
+              <path d="M21 12H9"></path>
+              <path d="M21 19H7"></path>
+            </svg>
+          </button>
+          <button class="tool-button icon-button" type="button" data-format-control="align:justify" aria-label="Justify" title="Justify">
+            <svg class="tool-icon lucide lucide-text-align-justify" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 5h18"></path>
+              <path d="M3 12h18"></path>
+              <path d="M3 19h18"></path>
+            </svg>
+          </button>
+        </div>
+      </section>
+
       <section class="findbar" id="findBar" role="search" aria-label="Find in document" hidden>
         <label class="findbar-label" for="findInput">Find</label>
         <input
@@ -197,34 +271,31 @@
           <span id="statusText">Ready</span>
           <span class="zoom-state" id="zoomState" hidden>Zoom 100%</span>
         </span>
-        <span id="documentStats">0 words</span>
+        <span class="status-metrics">
+          <span class="selection-stats" id="selectionStats" aria-live="polite" hidden></span>
+          <span id="documentStats">0 words</span>
+        </span>
       </footer>
     </div>
 
     <input id="fileInput" class="hidden-file-input" type="file" accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain">
 
+    <div class="format-selection-overlay" id="formatSelectionOverlay" aria-hidden="true" hidden></div>
     <div class="find-overlay" id="findOverlay" aria-hidden="true"></div>
 
     <div class="spelling-context-menu" id="spellingContextMenu" role="menu" aria-label="Spelling suggestions" hidden></div>
 
-    <div class="selection-toolbar" id="selectionToolbar" role="toolbar" aria-label="Markdown formatting" hidden>
-      <button class="tool-button strong" type="button" data-toolbar-action="bold" aria-label="Bold" title="Bold">B</button>
-      <button class="tool-button emphasis" type="button" data-toolbar-action="italic" aria-label="Italic" title="Italic">I</button>
-      <button class="tool-button strike" type="button" data-toolbar-action="strikethrough" aria-label="Strikethrough" title="Strikethrough">S</button>
-      <button class="tool-button code" type="button" data-toolbar-action="inlineCode" aria-label="Inline code" title="Inline code">&lt;/&gt;</button>
-      <span class="tool-separator" aria-hidden="true"></span>
-      <button class="tool-button" type="button" data-toolbar-action="paragraph" aria-label="Paragraph text" title="Paragraph text">P</button>
-      <button class="tool-button" type="button" data-toolbar-action="heading1" aria-label="Heading 1" title="Heading 1">H1</button>
-      <button class="tool-button" type="button" data-toolbar-action="heading2" aria-label="Heading 2" title="Heading 2">H2</button>
-      <button class="tool-button" type="button" data-toolbar-action="heading3" aria-label="Heading 3" title="Heading 3">H3</button>
-      <button class="tool-button" type="button" data-toolbar-action="blockquote" aria-label="Block quote" title="Block quote">&gt;</button>
-      <span class="tool-separator" aria-hidden="true"></span>
-      <button class="tool-button" type="button" data-toolbar-action="bulletList" aria-label="Bulleted list" title="Bulleted list">-</button>
-      <button class="tool-button" type="button" data-toolbar-action="numberedList" aria-label="Numbered list" title="Numbered list">1.</button>
-      <button class="tool-button" type="button" data-toolbar-action="taskList" aria-label="Task list" title="Task list">[ ]</button>
-      <button class="tool-button code" type="button" data-toolbar-action="codeBlock" aria-label="Code block" title="Code block">{ }</button>
-      <button class="tool-button" type="button" data-toolbar-action="table" aria-label="Table" title="Table">T</button>
-      <button class="tool-button" type="button" data-toolbar-action="horizontalRule" aria-label="Horizontal rule" title="Horizontal rule">---</button>
+    <div class="editor-context-menu" id="editorContextMenu" role="menu" aria-label="Editor actions" hidden>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="undo">Undo</button>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="redo">Redo</button>
+      <span class="editor-menu-separator" aria-hidden="true"></span>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="cut">Cut</button>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="copy">Copy</button>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="paste">Paste</button>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="pastePlainText">Paste as Plain Text</button>
+      <span class="editor-menu-separator" aria-hidden="true"></span>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="selectAll">Select All</button>
+      <button class="editor-menu-item" type="button" role="menuitem" data-editor-context-action="spellingSuggestions">Spelling Suggestions</button>
     </div>
 
     <div class="table-context-menu" id="tableContextMenu" role="menu" aria-label="Table actions" hidden>
