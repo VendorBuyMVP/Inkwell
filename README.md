@@ -11,6 +11,7 @@ It stores Markdown files locally and does not require accounts, sync, telemetry,
 - Open, save, save as, and new document workflows
 - Recent document access on macOS
 - Multi-window editing
+- Click a web link in the editor to open it in your default browser
 - Find and replace, Use Selection for Find, and keyboard navigation
 - Dark and light themes, with macOS system appearance support
 - Keyboard shortcuts, including Command-key shortcuts on macOS
