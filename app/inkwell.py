@@ -313,6 +313,13 @@ class InkwellWindowSession:
                 result = {}
             elif action == "openFile":
                 result = self._open_file()
+            elif action == "openWebLink":
+                uri = data.get("url")
+                parsed = urlparse(uri) if isinstance(uri, str) else None
+                if not parsed or parsed.scheme not in ("http", "https") or not parsed.hostname:
+                    raise ValueError("Expected a web link.")
+                Gtk.show_uri_on_window(self.window, uri, Gtk.get_current_event_time())
+                result = {}
             elif action == "saveFile":
                 result = self._save_file(data, force_dialog=False)
             elif action == "saveFileAs":

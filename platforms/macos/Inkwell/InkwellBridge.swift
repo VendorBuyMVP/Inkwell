@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import WebKit
 
@@ -36,6 +37,18 @@ final class InkwellBridge: NSObject, WKScriptMessageHandler {
         }
 
         switch request.action {
+        case "openWebLink":
+            guard let raw = request.payload?["url"]?.stringValue,
+                  let url = URL(string: raw),
+                  let scheme = url.scheme?.lowercased(),
+                  ["http", "https"].contains(scheme),
+                  let host = url.host, !host.isEmpty else {
+                throw InkwellError.invalidPayload("Expected a web link.")
+            }
+            guard NSWorkspace.shared.open(url) else {
+                throw InkwellError.invalidPayload("Could not open the link in your browser.")
+            }
+            reply(id: request.id, ok: true, data: [:], error: nil)
         case "newFile":
             reply(id: request.id, ok: true, data: windowController.newFile(), error: nil)
         case "newWindow":

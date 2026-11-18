@@ -3700,8 +3700,22 @@
   }
 
   function handleEditorClick(event) {
-    if (event.target.closest("a")) {
+    const link = event.target.closest("a");
+    if (link) {
       event.preventDefault();
+      if (!event.isTrusted || event.button !== 0 || isSecondaryEditorEvent(event) || window.getSelection()?.isCollapsed === false) {
+        return;
+      }
+      if (!["http:", "https:"].includes(link.protocol) || !link.hostname) {
+        setStatus("Only web links can open in the browser");
+        return;
+      }
+      if (bridge.native) {
+        bridge.send("openWebLink", { url: link.href })
+          .catch(() => setStatus("Could not open the link in your browser"));
+      } else {
+        window.open(link.href, "_blank", "noopener,noreferrer");
+      }
       return;
     }
 

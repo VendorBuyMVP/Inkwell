@@ -35,10 +35,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>Focused local Markdown editing</caption>
-      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/v0.12.1/app/assets/brand/social-share.png</image>
+      <image>https://raw.githubusercontent.com/VendorBuyMVP/Inkwell/bdbf15bea17015c1790c4f6d07ff92602d17425c/app/assets/brand/social-share.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.12.2" date="2026-11-17">
+      <description>
+        <p>Click an HTTP or HTTPS link in the editor to open it in the default browser on macOS and Linux.</p>
+      </description>
+    </release>
     <release version="0.12.1" date="2026-06-16">
       <description>
         <p>Fixes list editing caret preservation so Markdown autoformat, undoing autoformatted lists, and list-item Backspace unwrapping keep the caret at the user's logical text position.</p>
